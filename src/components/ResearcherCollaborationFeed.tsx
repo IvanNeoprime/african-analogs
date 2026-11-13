@@ -9,6 +9,11 @@ import {
   ResearchTimelineStep,
 } from '../types';
 import {
+  DWARF_PLANET_BODIES,
+  PLANET_BODIES,
+  SATELLITE_BODIES,
+} from '../data/celestialBodies';
+import {
   Search,
   MessageSquare,
   Share2,
@@ -125,6 +130,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
   const [selectedPlanet, setSelectedPlanet] = useState<'ALL' | PlanetaryTarget>('ALL');
   const [historyScope, setHistoryScope] = useState<'profile' | 'all_past'>('profile');
   const [collaboratorSearch, setCollaboratorSearch] = useState('');
+  const [studySearchQuery, setStudySearchQuery] = useState('');
 
   const [activeSampleDetail, setActiveSampleDetail] = useState<GeologicalSample>(
     samples.find((s) => s.collaboratorId === collaborators[0]?.id) || samples[0] || activeSample
@@ -184,17 +190,25 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
   });
 
   const publicResearches = useMemo(() => {
+    const q = studySearchQuery.trim().toLowerCase();
     return samples.filter((s) => {
       const planetOk = selectedPlanet === 'ALL' || s.targetPlanet === selectedPlanet;
-      if (historyScope === 'all_past' || selectedCollaboratorId === 'ALL') {
-        return planetOk;
-      }
-      const colMatch =
-        s.collaboratorId === selectedCollaboratorId ||
-        collaborators.find((c) => c.id === selectedCollaboratorId)?.name === s.collectorName;
-      return planetOk && colMatch;
+      if (!planetOk) return false;
+      const scopeOk =
+        historyScope === 'all_past' || selectedCollaboratorId === 'ALL'
+          ? true
+          : s.collaboratorId === selectedCollaboratorId ||
+            collaborators.find((c) => c.id === selectedCollaboratorId)?.name === s.collectorName;
+      if (!scopeOk) return false;
+      if (!q) return true;
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.customLocation || '').toLowerCase().includes(q) ||
+        s.collectorName.toLowerCase().includes(q) ||
+        Object.keys(s.minerals || {}).some((m) => m.toLowerCase().includes(q))
+      );
     });
-  }, [samples, selectedPlanet, historyScope, selectedCollaboratorId, collaborators]);
+  }, [samples, selectedPlanet, historyScope, selectedCollaboratorId, collaborators, studySearchQuery]);
 
   const handleSelectCollaborator = (colId: string | 'ALL') => {
     setSelectedCollaboratorId(colId);
@@ -298,6 +312,10 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       content: text,
     });
 
+    if (currentUser && activeCollaborator.id === currentUser.id) {
+      return;
+    }
+
     setIsDirectReplying(true);
     try {
       const response = await fetch(HARDCODED_API_ENDPOINTS.BACKEND_CHAT, {
@@ -351,6 +369,10 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       timestamp: 'Agora',
       content: text,
     });
+
+    if (currentUser && activeSampleDetail.collaboratorId === currentUser.id) {
+      return;
+    }
 
     setIsStudyReplying(true);
     try {
@@ -665,12 +687,27 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                         onChange={(e) => setNetworkTarget(e.target.value as PlanetaryTarget)}
                         className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                       >
-                        <option value="Mars">Marte</option>
-                        <option value="Moon">Lua</option>
-                        <option value="Europa">Europa</option>
-                        <option value="Enceladus">Encélado</option>
-                        <option value="Titan">Titã</option>
-                        <option value="Venus">Vênus</option>
+                        <optgroup label="Planetas do Sistema Solar">
+                          {PLANET_BODIES.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.namePt}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Planetas Anões">
+                          {DWARF_PLANET_BODIES.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.namePt}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Satélites Naturais (Luas)">
+                          {SATELLITE_BODIES.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.namePt} ({b.hostBodyPt})
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </div>
                   </div>
@@ -741,7 +778,8 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {networkGroups.map((group) => {
-                    const isMember = group.memberIds.includes('user-self');
+                    const myMemberId = currentUser?.id || 'user-self';
+                    const isMember = group.memberIds.includes(myMemberId);
                     const members = collaborators.filter((c) => group.memberIds.includes(c.id));
                     return (
                       <div key={group.id} className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] flex flex-col justify-between space-y-3">
@@ -950,20 +988,47 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                     </div>
 
                     <select
-                      aria-label="Filtrar pesquisas anteriores por planeta"
+                      aria-label="Filtrar pesquisas anteriores por planeta ou satélite"
                       value={selectedPlanet}
                       onChange={(e) => setSelectedPlanet(e.target.value as 'ALL' | PlanetaryTarget)}
                       className="bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-1.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                     >
-                      <option value="ALL">Todos Planetas</option>
-                      <option value="Mars">Marte</option>
-                      <option value="Moon">Lua</option>
-                      <option value="Europa">Europa</option>
-                      <option value="Enceladus">Encélado</option>
-                      <option value="Titan">Titã</option>
-                      <option value="Venus">Vênus</option>
+                      <option value="ALL">Todos Planetas e Luas</option>
+                      <optgroup label="Planetas do Sistema Solar">
+                        {PLANET_BODIES.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.namePt}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Planetas Anões">
+                        {DWARF_PLANET_BODIES.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.namePt}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Satélites Naturais (Luas)">
+                        {SATELLITE_BODIES.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.namePt} ({b.hostBodyPt})
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                   </div>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={1.75} aria-hidden="true" />
+                  <input
+                    type="text"
+                    aria-label="Buscar pesquisas por título, lugar ou autor"
+                    value={studySearchQuery}
+                    onChange={(e) => setStudySearchQuery(e.target.value)}
+                    placeholder="Buscar pesquisa por título, lugar, mineral ou autor..."
+                    className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] text-xs pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                  />
                 </div>
 
                 {publicResearches.length === 0 ? (

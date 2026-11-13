@@ -1,4 +1,5 @@
 import { OfficialApiEndpoint } from '../types';
+import { getCelestialBodyLabel, getCelestialNasaQuery } from '../data/celestialBodies';
 
 /**
  * Catálogo hardcoded das APIs científicas oficiais, camadas geoespaciais NASA/DEM
@@ -63,13 +64,13 @@ export const OFFICIAL_API_CATALOG: OfficialApiEndpoint[] = [
     description: 'Monitoramento em tempo real de vulcões, poeira desértica e eventos térmicos ativos.',
   },
   {
-    id: 'gemini-research',
-    name: 'Motor Analítico & Visão Geológica IA',
-    provider: 'African Analogs Server Proxy',
+    id: 'nvidia-nemotron-copilot',
+    name: 'Copiloto Científico NVIDIA Nemotron 3.5',
+    provider: 'NVIDIA NIM (nvidia/nemotron-3.5-lightning-30b-a3b)',
     category: 'IA & Visão',
     endpoint: HARDCODED_API_ENDPOINTS.BACKEND_CHAT,
     authMode: 'Proxy Servidor Integrado',
-    description: 'Rotas /api/gemini/chat, /vision-analyze, /diagnostics e /generate-report pré-conectadas.',
+    description: 'Modelo Nemotron 3.5 Lightning com chave hardcoded no servidor para chat, visão e diagnósticos.',
   },
   {
     id: 'local-ecosystem',
@@ -120,3 +121,166 @@ export async function fetchOfficialNasaEvents(): Promise<NasaEonetEventItem[]> {
     return [];
   }
 }
+
+export type NasaShortcutCategory = 'datasets' | 'imagery' | 'missions';
+
+export interface NasaDataShortcut {
+  id: string;
+  title: string;
+  provider: string;
+  category: NasaShortcutCategory;
+  formats: string;
+  url: string;
+  description: string;
+  howToUseHere: string;
+}
+
+export const NASA_DATA_SHORTCUTS: NasaDataShortcut[] = [
+  {
+    id: 'nasa-pds-main',
+    title: 'NASA PDS (Planetary Data System)',
+    provider: 'NASA Oficial · Arquivo Planetário',
+    category: 'datasets',
+    formats: 'CSV · Tabelas · Espectros',
+    url: 'https://pds.nasa.gov/',
+    description:
+      'Repositório oficial com todos os dados públicos de missões da NASA em Marte, Lua, Titã, Europa, Encélado e Vênus.',
+    howToUseHere: 'Baixe tabelas ou arquivos CSV/JSON e importe em "Importar Planilha" ou no Copiloto IA.',
+  },
+  {
+    id: 'nasa-pds-geosciences',
+    title: 'NASA PDS Geosciences Node (Rovers)',
+    provider: 'NASA / Washington University',
+    category: 'missions',
+    formats: 'Dados XRF · XRD · Solo de Marte',
+    url: 'https://pds-geosciences.wustl.edu/',
+    description:
+      'Dados geológicos reais dos rovers Perseverance, Curiosity e sondas MRO/LRO, incluindo composição mineral e química de rochas.',
+    howToUseHere: 'Consulte teores de minerais e óxidos para digitar em "Dados Manuais" ou comparar nos gráficos.',
+  },
+  {
+    id: 'nasa-earthdata-search',
+    title: 'NASA Earthdata Search (Satélite & DEM)',
+    provider: 'NASA EOSDIS Earthdata',
+    category: 'imagery',
+    formats: 'GeoTIFF · SRTM DEM · Satélite',
+    url: 'https://search.earthdata.nasa.gov/',
+    description:
+      'Portal gratuito de imagens de satélite e modelos de elevação digital (SRTM) para desertos africanos e áreas de estudo na Terra.',
+    howToUseHere: 'Baixe arquivos GeoTIFF ou imagens e envie na aba "Foto / Câmera" para análise do terreno.',
+  },
+  {
+    id: 'nasa-worldview',
+    title: 'NASA Worldview (Imagens Orbitais Diárias)',
+    provider: 'NASA GIBS / EOSDIS',
+    category: 'imagery',
+    formats: 'PNG · JPEG · GeoTIFF',
+    url: 'https://worldview.earthdata.nasa.gov/',
+    description:
+      'Mapa de satélite atualizado diariamente que permite visualizar e baixar recortes de tempestades de poeira, dunas e lagos salinos.',
+    howToUseHere: 'Exporte um recorte em PNG/JPG/GeoTIFF e carregue em "Foto / Câmera".',
+  },
+  {
+    id: 'nasa-trek',
+    title: 'NASA Mars & Moon Trek (Mapas 3D/DEM)',
+    provider: 'NASA Solar System Treks',
+    category: 'missions',
+    formats: 'GeoTIFF · Elevação · Crateras',
+    url: 'https://trek.nasa.gov/',
+    description:
+      'Mapas oficiais da NASA para Marte, Lua e outros mundos com ferramenta para baixar recortes de relevo e comparar crateras.',
+    howToUseHere: 'Baixe recortes de superfície para comparar com lugares africanos no Copiloto Visual.',
+  },
+  {
+    id: 'nasa-mars-raw',
+    title: 'NASA Mars Raw Images (Perseverance & Curiosity)',
+    provider: 'NASA JPL Mars Exploration',
+    category: 'imagery',
+    formats: 'Fotos Reais · JPG / PNG',
+    url: 'https://mars.nasa.gov/mars2020/multimedia/raw-images/',
+    description:
+      'Galeria pública com milhares de fotos reais de rochas, regolito e camadas sedimentares tiradas na superfície de Marte.',
+    howToUseHere: 'Salve uma foto de rocha marciana e teste a comparação visual na aba "Foto / Câmera".',
+  },
+  {
+    id: 'nasa-hirise',
+    title: 'NASA MRO HiRISE (Alta Resolução de Marte)',
+    provider: 'NASA JPL / Univ. of Arizona',
+    category: 'missions',
+    formats: 'Imagens Orbitais · Dunas e Rochas',
+    url: 'https://www.uahirise.org/catalog/',
+    description:
+      'Catálogo orbital de altíssima resolução mostrando dunas, deltas antigos e depósitos minerais na superfície de Marte.',
+    howToUseHere: 'Use as imagens para comparar morfologia com o Mar de Areia do Namibe ou Estrutura de Richat.',
+  },
+  {
+    id: 'nasa-usgs-speclib',
+    title: 'Biblioteca Espectral USGS / NASA',
+    provider: 'USGS & Calibração NASA PDS',
+    category: 'datasets',
+    formats: 'Espectros · Minerais · ASCII/CSV',
+    url: 'https://crustal.usgs.gov/speclab/QueryAll07a.php',
+    description:
+      'Assinaturas espectrais laboratoriais de referência (hematita, gipsita, basalto, argilas) usadas por sondas espaciais.',
+    howToUseHere: 'Consulte espectros e minerais de referência para validar suas amostras manuais.',
+  },
+  {
+    id: 'nasa-open-data',
+    title: 'NASA Open Data Portal',
+    provider: 'NASA Data.gov',
+    category: 'datasets',
+    formats: 'CSV · JSON · Datasets Abertos',
+    url: 'https://data.nasa.gov/',
+    description:
+      'Portal de dados abertos da NASA com planilhas sobre meteoritos, astrobiologia, condições atmosféricas e missões espaciais.',
+    howToUseHere: 'Baixe conjuntos de dados em CSV ou JSON e envie ao Copiloto IA para interpretação.',
+  },
+  {
+    id: 'nasa-sservi-analogs',
+    title: 'NASA SSERVI — Análogos Terrestres',
+    provider: 'NASA Exploration Science Institute',
+    category: 'missions',
+    formats: 'Guias de Campo · Análogos',
+    url: 'https://sservi.nasa.gov/',
+    description:
+      'Programas de pesquisa e campanhas de campo em locais terrestres extremos usados pela NASA para testar instrumentos lunares e marcianos.',
+    howToUseHere: 'Encontre referências científicas para enriquecer suas notas e artigos publicados.',
+  },
+];
+
+export function buildNasaWorldviewUrl(lat: number, lng: number): string {
+  const minLng = Math.max(-180, lng - 4).toFixed(2);
+  const minLat = Math.max(-85, lat - 4).toFixed(2);
+  const maxLng = Math.min(180, lng + 4).toFixed(2);
+  const maxLat = Math.min(85, lat + 4).toFixed(2);
+  return `https://worldview.earthdata.nasa.gov/?v=${minLng},${minLat},${maxLng},${maxLat}`;
+}
+
+export function buildNasaImagesSearchUrl(targetPlanet: string): string {
+  const q = getCelestialNasaQuery(targetPlanet);
+  return `https://images.nasa.gov/search-results?q=${encodeURIComponent(q)}`;
+}
+
+export function buildNasaOpenDataSearchUrl(targetPlanet: string): string {
+  const label = getCelestialBodyLabel(targetPlanet);
+  const q = targetPlanet === 'Both' ? 'Mars Moon' : `${targetPlanet} ${label}`;
+  return `https://data.nasa.gov/browse?q=${encodeURIComponent(q)}`;
+}
+
+export function downloadNasaCsvTemplate(): void {
+  const csvContent = [
+    'name,siteId,collector,institution,lat,lng,depth,aw,ph,target,classification,notes',
+    '"Amostra Exemplo (preencha com seus dados ou do NASA PDS)",danakil,"Seu Nome","Sua Instituicao",14.2417,40.2994,5.0,0.28,3.2,Mars,"Evaporito / Basalto alterado","Substitua esta linha pelos valores observados ou baixados da NASA"',
+  ].join('\n');
+
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'modelo_planilha_nasa_african_analogs.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+

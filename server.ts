@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 
 dotenv.config();
 
@@ -53,19 +53,59 @@ function writeLocalDb(patch: Record<string, any>): void {
   }
 }
 
-// Server-side Gemini initialization
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({
-  apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
+// Hardcoded NVIDIA NIM AI Configuration (nvidia/nemotron-3.5-lightning-30b-a3b)
+const NVIDIA_API_KEY =
+  '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';
+const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+
+const openai = new OpenAI({
+  apiKey: NVIDIA_API_KEY,
+  baseURL: NVIDIA_BASE_URL,
 });
 
-// Interactive AI Research Analyst (Prompt, Document/CSV & Optional Location)
-app.post('/api/gemini/chat', async (req, res) => {
+interface NemotronMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+async function runNemotronCompletion(
+  messages: NemotronMessage[]
+): Promise<{ content: string; reasoning: string }> {
+  const completion = await (openai.chat.completions.create as any)({
+    model: NVIDIA_MODEL,
+    messages,
+    temperature: 1,
+    top_p: 0.95,
+    max_tokens: 16384,
+    reasoning_budget: 16384,
+    chat_template_kwargs: { enable_thinking: true },
+    stream: true,
+  });
+
+  let reasoning = '';
+  let content = '';
+
+  for await (const chunk of completion) {
+    const delta = chunk.choices?.[0]?.delta as
+      | { content?: string | null; reasoning_content?: string | null }
+      | undefined;
+    if (delta?.reasoning_content) {
+      reasoning += delta.reasoning_content;
+    }
+    if (delta?.content) {
+      content += delta.content;
+    }
+  }
+
+  return {
+    content: content.trim(),
+    reasoning: reasoning.trim(),
+  };
+}
+
+// Interactive AI Research Copilot (Prompt, Document/CSV & Optional Location)
+app.post(['/api/gemini/chat', '/api/ai/chat'], async (req, res) => {
   try {
     const {
       messages = [],
@@ -79,27 +119,21 @@ app.post('/api/gemini/chat', async (req, res) => {
       activeSample,
     } = req.body;
 
-    if (!apiKey) {
-      return res.status(500).json({
-        error: 'Chave de API do Gemini não configurada no servidor. Verifique o painel Secrets.',
-      });
-    }
-
-    const systemInstruction = `Você é o Analista Científico IA da plataforma colaborativa African Analogs (alinhado aos catálogos oficiais NASA PDS, OpenTopography SRTM DEM, USGS e ESA Europlanet).
-Sua missão é auxiliar pesquisadores individuais e equipes a realizar investigações iniciais e validar lugares análogos na Terra (especialmente no continente africano e referências globais da NASA) para Marte, Lua, Europa, Encélado, Titã e Vênus — mesmo quando não há câmera ou imagem de visão computacional disponível, analisando diretamente descrições textuais, documentos técnicos e arquivos CSV/JSON de campo.
+    const systemInstruction = `Você é o Copiloto Analista Científico da plataforma colaborativa African Analogs (alinhado aos catálogos oficiais NASA PDS, OpenTopography SRTM DEM, USGS e ESA Europlanet).
+Sua missão é atuar como copiloto de análise para ajudar pesquisadores e estudantes a interpretar dados inseridos manualmente sobre lugares análogos na Terra (especialmente na África e referências globais da NASA) para Marte, Lua, Europa, Encélado, Titã e Vênus.
 
 Conhecimento de referência:
 1. Sítios Análogos Africanos & Globais: Depressão de Danakil & Dallol (Etiópia - Marte/Vênus hidrotermal hiperácido), Estrutura de Richat (Mauritânia - calibração orbital/Marte), Mar de Areia do Namibe (Namíbia - dunas lineares de Titã/Marte), Domo de Impacto de Vredefort (África do Sul - brechas e quartzo chocado da Lua), Lago Natron (Tanzânia - lagos alcalinos carbonatados de Encélado), Deserto do Atacama (Chile), Lanzarote (Espanha), Borup Fiord Pass (Ártico - Europa).
-2. Análise de Documentos & CSV: Extraia padrões geoquímicos (aw, pH, óxidos XRF, minerais XRD), avalie limitações de habitabilidade/astrobiologia e estime o índice de fidelidade análoga (AFI).
-3. Localização Opcional: Se o usuário fornecer coordenadas GPS ou sítio geográfico, relacione relevo, litologia regional e contexto topográfico DEM; se não fornecer, realize a análise estritamente pelos parâmetros textuais ou tabulares enviados.
+2. Análise de Documentos & CSV: Extraia padrões geoquímicos (aw, pH, óxidos XRF, minerais XRD), avalie limitações de habitabilidade/astrobiologia e comente o índice de semelhança/fidelidade análoga (AFI).
+3. Localização Opcional: Se o usuário fornecer coordenadas GPS ou sítio geográfico, relacione relevo, litologia regional e contexto topográfico DEM; caso contrário, analise estritamente pelos parâmetros manuais e documentos enviados.
 
 Diretrizes de resposta:
-- Responda em Português com rigor científico, objetividade e clareza estruturada (tópicos curtos, análogo terrestre mais próximo, corpo planetário compatível, métricas estimadas e recomendações práticas de validação).
-- Evite tom informal ou saudações genéricas de chatbot.`;
+- Responda em Português claro, estruturado e acessível (tópicos curtos, análogo terrestre mais próximo, pontos fortes, limites e recomendações práticas).
+- Não invente medições que o pesquisador não forneceu; ajude-o a interpretar os dados manuais.`;
 
     let contextPrompt = '';
     if (siteContext) {
-      contextPrompt += `\n[SÍTIO DE REFERÊNCIA NO MAPA: ${siteContext.name} (${siteContext.country || ''}) | Alvo: ${siteContext.targetPlanet} | AFI: ${siteContext.fidelityScore}%]\n`;
+      contextPrompt += `\n[SÍTIO DE REFERÊNCIA NO MAPA: ${siteContext.name} (${siteContext.country || ''}) | Alvo: ${siteContext.targetPlanet} | Semelhança: ${siteContext.fidelityScore}%]\n`;
     }
     if (useLocation && coordinates && (coordinates.lat !== undefined || Array.isArray(coordinates))) {
       const lat = Array.isArray(coordinates) ? coordinates[0] : coordinates.lat;
@@ -107,228 +141,223 @@ Diretrizes de resposta:
       contextPrompt += `\n[LOCALIZAÇÃO EM TEMPO REAL FORNECIDA: Latitude ${lat}°, Longitude ${lng}°]\n`;
     }
     if (activeSample) {
-      contextPrompt += `\n[AMOSTRA ATIVA: "${activeSample.name}" | Minerais: ${JSON.stringify(activeSample.minerals)} | aw: ${activeSample.waterActivity} | pH: ${activeSample.pH}]\n`;
+      contextPrompt += `\n[DADOS MANUAIS ATIVOS: "${activeSample.name}" | Lugar: ${activeSample.customLocation || siteContext?.name || 'Não informado'} | Minerais: ${JSON.stringify(activeSample.minerals)} | Umidade (aw): ${activeSample.waterActivity} | pH: ${activeSample.pH}]\n`;
     }
     if (documentContent) {
       const trimmedDoc = String(documentContent).slice(0, 12000);
       contextPrompt += `\n[CONTEÚDO DO DOCUMENTO / CSV ANEXADO (${documentName || 'arquivo_pesquisa'})]:\n\`\`\`\n${trimmedDoc}\n\`\`\`\n`;
     }
 
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+    const nemotronMessages: NemotronMessage[] = [
+      { role: 'system', content: systemInstruction },
+    ];
 
     if (contextPrompt) {
-      contents.push({
+      nemotronMessages.push({
         role: 'user',
-        parts: [{ text: `Contexto técnico desta sessão de pesquisa:\n${contextPrompt}` }],
+        content: `Contexto técnico desta sessão de pesquisa:\n${contextPrompt}`,
       });
-      contents.push({
-        role: 'model',
-        parts: [{ text: 'Contexto e dados carregados. Pronto para analisar os parâmetros e documentos.' }],
+      nemotronMessages.push({
+        role: 'assistant',
+        content: 'Contexto e dados manuais carregados. Pronto para atuar como copiloto na análise.',
       });
     }
 
     if (Array.isArray(messages) && messages.length > 0) {
       for (const msg of messages) {
-        contents.push({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }],
+        nemotronMessages.push({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: String(msg.content || ''),
         });
       }
-    }
-
-    if (prompt && (!Array.isArray(messages) || messages.length === 0)) {
-      contents.push({
+    } else if (prompt) {
+      nemotronMessages.push({
         role: 'user',
-        parts: [
-          {
-            text: `Corpo planetário de interesse inicial: ${targetPlanet}.\nSolicitação do pesquisador: ${prompt}`,
-          },
-        ],
+        content: `Corpo planetário de interesse: ${targetPlanet}.\nSolicitação do usuário: ${prompt}`,
       });
-    } else if (documentContent && contents.length <= 2) {
-      contents.push({
+    } else if (documentContent) {
+      nemotronMessages.push({
         role: 'user',
-        parts: [
-          {
-            text: `Analise o documento/CSV anexado acima para o corpo planetário ${targetPlanet}, identifique o sítio análogo terrestre mais compatível e apresente um parecer técnico inicial.`,
-          },
-        ],
+        content: `Analise o documento/CSV anexado acima para o corpo planetário ${targetPlanet}, identifique o sítio análogo terrestre mais compatível e apresente um parecer técnico claro.`,
       });
     }
 
-    if (contents.length === 0) {
+    if (nemotronMessages.length <= 1) {
       return res.status(400).json({
-        error: 'Forneça um prompt de pesquisa ou anexe um documento/CSV para iniciar a análise.',
+        error: 'Forneça uma pergunta de pesquisa ou anexe um documento/CSV para iniciar a análise.',
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: contents as any,
-      config: {
-        systemInstruction,
-      },
-    });
-
-    return res.json({ reply: response.text });
+    const { content, reasoning } = await runNemotronCompletion(nemotronMessages);
+    return res.json({ reply: content, reasoning, model: NVIDIA_MODEL });
   } catch (error: any) {
     console.error('Erro na rota /api/gemini/chat:', error);
     return res.status(500).json({
-      error: error.message || 'Falha ao processar solicitação com o analista planetário.',
+      error: error.message || 'Falha ao processar solicitação com a IA NVIDIA Nemotron.',
     });
   }
 });
 
-// Computer Vision & Real-time Location Analysis for Planetary Geology (PNG/JPEG/TIFF/Encrypted Decoded)
-app.post('/api/gemini/vision-analyze', async (req, res) => {
+// Computer Vision & Real-time Location Analysis via Measured Pixel Telemetry + Raster Metadata + Nemotron Copilot
+app.post(['/api/gemini/vision-analyze', '/api/ai/vision-analyze'], async (req, res) => {
   try {
     const {
       imageBase64,
-      mimeType = 'image/jpeg',
       coordinates,
       targetPlanet = 'Mars',
       rasterMetadata,
+      visualTelemetry,
+      visualNotes,
     } = req.body;
 
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Chave de API do Gemini não configurada.' });
+    if (!imageBase64 && !visualTelemetry && !rasterMetadata) {
+      return res.status(400).json({ error: 'Nenhuma imagem ou telemetria visual fornecida para análise.' });
     }
-
-    if (!imageBase64) {
-      return res.status(400).json({ error: 'Nenhuma imagem fornecida para análise de visão computacional.' });
-    }
-
-    const dataUriMatch = String(imageBase64).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-    const resolvedMimeType = dataUriMatch ? dataUriMatch[1] : mimeType;
-    const cleanBase64 = dataUriMatch
-      ? dataUriMatch[2]
-      : String(imageBase64).replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
 
     const targetLabelMap: Record<string, string> = {
-      Mars: 'MARTE',
-      Moon: 'LUA',
-      Europa: 'EUROPA (JÚPITER)',
-      Enceladus: 'ENCÉLADO (SATURNO)',
-      Titan: 'TITÃ (SATURNO)',
+      Mercury: 'MERCÚRIO',
       Venus: 'VÊNUS',
+      Earth: 'TERRA (REFERÊNCIA)',
+      Mars: 'MARTE',
+      Jupiter: 'JÚPITER',
+      Saturn: 'SATURNO',
+      Uranus: 'URANO',
+      Neptune: 'NETUNO',
+      Ceres: 'CERES (PLANETA ANÃO)',
+      Pluto: 'PLUTÃO (PLANETA ANÃO)',
+      Moon: 'LUA (TERRA)',
+      Phobos: 'FOBOS (MARTE)',
+      Deimos: 'DEIMOS (MARTE)',
+      Io: 'IO (JÚPITER)',
+      Europa: 'EUROPA (JÚPITER)',
+      Ganymede: 'GANIMEDES (JÚPITER)',
+      Callisto: 'CALISTO (JÚPITER)',
+      Mimas: 'MIMAS (SATURNO)',
+      Enceladus: 'ENCÉLADO (SATURNO)',
+      Tethys: 'TÉTIS (SATURNO)',
+      Dione: 'DIONE (SATURNO)',
+      Rhea: 'REIA (SATURNO)',
+      Titan: 'TITÃ (SATURNO)',
+      Iapetus: 'JÁPETO (SATURNO)',
+      Miranda: 'MIRANDA (URANO)',
+      Ariel: 'ARIEL (URANO)',
+      Umbriel: 'UMBRIEL (URANO)',
+      Titania: 'TITÂNIA (URANO)',
+      Oberon: 'OBERON (URANO)',
+      Triton: 'TRITÃO (NETUNO)',
+      Charon: 'CARONTE (PLUTÃO)',
       Both: 'MARTE e LUA',
     };
-    const targetLabel = targetLabelMap[targetPlanet] || 'MARTE';
+    const targetLabel = targetLabelMap[targetPlanet] || String(targetPlanet || 'MARTE').toUpperCase();
 
     const rasterContext = rasterMetadata
       ? `\n[METADADOS DO RASTER / TIFF / DESCRIPTOGRAFIA]: Formato: ${rasterMetadata.detectedFormat || 'Raster'} | Arquivo: ${rasterMetadata.originalFileName || 'campo'} | Dimensões: ${rasterMetadata.width || '?'}x${rasterMetadata.height || '?'} px | Bandas: ${rasterMetadata.bands || 1} (${rasterMetadata.bitsPerSample || 8}-bit) | Min/Média/Máx: ${rasterMetadata.minVal ?? '-'} / ${rasterMetadata.meanVal ?? '-'} / ${rasterMetadata.maxVal ?? '-'}${rasterMetadata.wasEncrypted ? ` | Descriptografado via: ${rasterMetadata.decryptionMethod}` : ''}\n`
       : '';
 
-    const promptText = `Você é o sistema avançado de Visão Computacional Geológica e Reconhecimento de Terrenos Planetários da plataforma African Analogs (alinhado aos catálogos NASA PDS e ESA Europlanet).
-Analise detalhadamente esta imagem de terreno, rocha, DEM GeoTIFF ou superfície capturada ${coordinates ? `nas coordenadas em tempo real [Lat: ${coordinates.lat}, Lng: ${coordinates.lng}]` : 'em campo'}.${rasterContext}
+    const telemetryContext = visualTelemetry
+      ? `\n[TELEMETRIA VISUAL MEDIDA DA IMAGEM]: Cor predominante: ${visualTelemetry.dominantColorTag || 'Neutra'} | RGB médio: (${visualTelemetry.meanRed ?? '-'}, ${visualTelemetry.meanGreen ?? '-'}, ${visualTelemetry.meanBlue ?? '-'}) | Albedo/Brilho estimado: ${visualTelemetry.brightnessAlbedo ?? '-'} | Índice de Óxido de Ferro (R-B): ${visualTelemetry.ironOxideIndex ?? '-'} | Contraste/Rugosidade superficial: ${visualTelemetry.surfaceContrast ?? '-'} | Dimensões: ${visualTelemetry.width || '?'}x${visualTelemetry.height || '?'} px\n`
+      : '';
 
-Avalie se este terreno/rocha possui feições análogas às de ${targetLabel}.
+    const notesContext = visualNotes ? `\n[OBSERVAÇÃO VISUAL DO USUÁRIO SOBRE A FOTO]: ${visualNotes}\n` : '';
 
-Responda em formato estruturado no seguinte formato textual claro em português:
-[CORPO_ANALOGO_PROVAVEL]: (Mars, Moon, Europa, Enceladus, Titan ou Venus)
-[ESCORE_FIDELIDADE]: (um número de 0 a 100)
-[ANALOGO_TERRESTRE_MAIS_PROXIMO]: (ex: Depressão de Danakil & Dallol, Estrutura de Richat, Mar de Areia do Namibe, Domo de Impacto de Vredefort, Lago Natron, Deserto do Atacama, Geopark de Lanzarote ou Borup Fiord Pass)
-[FEICOES_GEOLOGICAS_IDENTIFICADAS]: (liste 4 a 6 feições visuais, ex: crosta evaporítica, dunas lineares, brecha de impacto, basalto vesicular, óxidos de ferro, regolito fragmentado)
-[MINERAIS_DETECTADOS_VISAO]: (liste minerais prováveis deduzidos pela cor, textura e albedo)
-[ADEQUACAO_INSTRUMENTAL]: (quais instrumentos espaciais se beneficiam de testes aqui, ex: Mastcam-Z, PIXL, SuperCam, SHERLOC, LROC, Cassini Radar, MISE)
-[DIAGNOSTICO_CIENTIFICO]: (parecer técnico sintetizado, sem enrolação, com rigor geológico)`;
+    const promptText = `Você é o sistema de apoio à Visão Geológica e Reconhecimento de Terrenos Planetários da plataforma African Analogs.
+Analise os dados visuais extraídos desta imagem de terreno, rocha, DEM GeoTIFF ou superfície capturada ${coordinates ? `nas coordenadas [Lat: ${coordinates.lat}, Lng: ${coordinates.lng}]` : 'em campo'}.${rasterContext}${telemetryContext}${notesContext}
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: resolvedMimeType,
-              data: cleanBase64,
-            },
-          },
-          {
-            text: promptText,
-          },
-        ],
+Avalie se este terreno/rocha possui características análogas às de ${targetLabel}.
+
+Responda obrigatoriamente neste formato textual exato em português (NÃO coloque parênteses ao redor das respostas):
+[CORPO_ANALOGO_PROVAVEL]: nome em inglês do planeta ou satélite natural mais compatível (ex: Mercury, Venus, Mars, Moon, Phobos, Io, Europa, Ganymede, Callisto, Enceladus, Titan, Triton, Ceres, Pluto, etc.)
+[ESCORE_FIDELIDADE]: número inteiro de 0 a 100
+[ANALOGO_TERRESTRE_MAIS_PROXIMO]: ex: Depressão de Danakil & Dallol, Estrutura de Richat, Mar de Areia do Namibe, Domo de Impacto de Vredefort, Lago Natron, Deserto do Atacama, Geopark de Lanzarote ou Borup Fiord Pass
+[FEICOES_GEOLOGICAS_IDENTIFICADAS]: 4 a 6 feições visuais separadas por ponto e vírgula
+[MINERAIS_DETECTADOS_VISAO]: 2 a 4 minerais prováveis separados por vírgula
+[ADEQUACAO_INSTRUMENTAL]: instrumentos espaciais separados por vírgula
+[DIAGNOSTICO_CIENTIFICO]: parecer claro em 3 a 5 linhas, sem enrolação`;
+
+    const { content: reply, reasoning } = await runNemotronCompletion([
+      {
+        role: 'system',
+        content:
+          'Você é um especialista em geomorfologia comparada planetária da NASA/ESA atuando como copiloto visual. Responda em português claro, rigoroso e no formato de tags solicitado sem usar parênteses em volta dos valores.',
       },
-      config: {
-        systemInstruction: 'Você é um especialista em visão computacional e geomorfologia comparada planetária da NASA/ESA. Responda em português técnico e objetivo.',
-      },
-    });
+      { role: 'user', content: promptText },
+    ]);
 
-    const reply = response.text || '';
+    const cleanOuterParens = (val: string) => val.replace(/^\(([\s\S]*)\)$/, '$1').trim();
 
-    // Extract structured sections
     const extract = (tag: string, defaultVal: string) => {
       const regex = new RegExp(`\\[${tag}\\]:\\s*(.+?)(?=\\n\\[|$)`, 's');
       const match = reply.match(regex);
-      return match ? match[1].trim() : defaultVal;
+      return match ? cleanOuterParens(match[1].trim()) : defaultVal;
     };
 
     const planetaryMatch = extract('CORPO_ANALOGO_PROVAVEL', targetPlanet);
-    const scoreStr = extract('ESCORE_FIDELIDADE', '88');
-    const fidelityScore = parseInt(scoreStr.replace(/\D/g, ''), 10) || 88;
+    const scoreStr = extract('ESCORE_FIDELIDADE', '82');
+    const fidelityScore = parseInt(scoreStr.replace(/\D/g, ''), 10) || 82;
     const closestAnalogue = extract('ANALOGO_TERRESTRE_MAIS_PROXIMO', 'Depressão de Danakil & Dallol');
-    const featuresRaw = extract('FEICOES_GEOLOGICAS_IDENTIFICADAS', 'Textura de regolito, fraturamento mecânico, albedo uniforme');
-    const mineralsRaw = extract('MINERAIS_DETECTADOS_VISAO', 'Silicatos, óxidos de ferro');
+    const featuresRaw = extract('FEICOES_GEOLOGICAS_IDENTIFICADAS', 'Textura de regolito; contraste superficial; albedo moderado');
+    const mineralsRaw = extract('MINERAIS_DETECTADOS_VISAO', 'Silicatos, Óxidos de Ferro');
     const instruments = extract('ADEQUACAO_INSTRUMENTAL', 'Mastcam-Z, ChemCam, SuperCam');
     const diagnosis = extract('DIAGNOSTICO_CIENTIFICO', reply);
+
+    const featureDelimiter = featuresRaw.includes(';') ? /[;\n•]+/ : /[,;\n•]+(?![^()]*\))/;
 
     return res.json({
       success: true,
       rawText: reply,
+      reasoning,
+      model: NVIDIA_MODEL,
       planetaryMatch,
       fidelityScore: Math.min(99, Math.max(30, fidelityScore)),
       closestAnalogue,
-      features: featuresRaw.split(/[,;\n•-]/).map((s) => s.trim()).filter((s) => s.length > 2),
-      minerals: mineralsRaw.split(/[,;\n•-]/).map((s) => s.trim()).filter((s) => s.length > 2),
+      features: featuresRaw.split(featureDelimiter).map((s) => cleanOuterParens(s.trim())).filter((s) => s.length > 2),
+      minerals: mineralsRaw.split(/[,;\n•]+/).map((s) => cleanOuterParens(s.trim())).filter((s) => s.length > 2),
       instruments,
       diagnosis,
     });
   } catch (error: any) {
     console.error('Erro na visão computacional:', error);
     return res.status(500).json({
-      error: error.message || 'Falha ao processar visão computacional com IA.',
+      error: error.message || 'Falha ao processar análise visual com NVIDIA Nemotron.',
     });
   }
 });
 
 // Menu-driven Scientific Diagnostics Pathway
-app.post('/api/gemini/diagnostics', async (req, res) => {
+app.post(['/api/gemini/diagnostics', '/api/ai/diagnostics'], async (req, res) => {
   try {
     const { action, sample, site, targetPlanet, coordinates } = req.body;
 
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Chave de API do Gemini não configurada.' });
-    }
-
     const actionPrompts: Record<string, string> = {
-      mars_jezero_match: `Avalie a compatibilidade da amostra "${sample?.name || 'Amostra de Campo'}" (${site?.name || 'Sítio'}) com os estratos sedimentares do delta e cratera de Jezero (Marte). Analise minerais presentes: ${JSON.stringify(sample?.minerals || {})}, aw: ${sample?.waterActivity}, pH: ${sample?.pH}.`,
-      moon_shackleton_match: `Avalie a equivalência da amostra "${sample?.name || 'Amostra'}" com o regolito da Bacia Polo Sul-Aitken e Cratera Shackleton (Lua), focando em anortosito, piroxênio, ilmenita, pseudotaquilito e voláteis criogênicos protegidos em regiões permanentemente sombreadas (PSRs).`,
-      europa_ice_brine_match: `Avalie a correspondência da amostra com a crosta de gelo e surgências de salmoura rica em sulfatos hidratados de Europa (Júpiter) visando o espectrômetro MISE da sonda Europa Clipper da NASA.`,
-      enceladus_serpentine_plume: `Avalie o potencial da amostra como análogo para o oceano hidrotermal de Encélado (Saturno), com foco em serpentinização abiótica, carbonatos de sódio (trona/natrão), pH hiperalcalino (9-11) e geração de H2 e CH4 molecular detectados pela sonda Cassini.`,
-      titan_hydrocarbon_dune: `Avalie a analogia da amostra e morfologia do sítio ${site?.name || ''} com as dunas orgânicas de tolina e lagos de hidrocarbonetos líquidos de Titã (Saturno) para a missão Dragonfly da NASA.`,
-      venus_supercritical_volcano: `Avalie a resistência e equivalência mineralógica com as planícies vulcânicas basálticas sob atmosfera supercrítica densa e corrosiva de Vênus (sondas VERITAS e DAVINCI da NASA).`,
-      rover_instrument_simulation: `Simule um ensaio operacional com instrumentos de rover (SuperCam LIBS/Raman, PIXL fluorescência elementar, SHERLOC UV) na amostra "${sample?.name || ''}". Quais bioassinaturas ou traços elementares seriam detectados?`,
-      extremophile_biosignature: `Analise a viabilidade biológica e preservação de bioassinaturas considerando a atividade de água aw=${sample?.waterActivity || 0.3}, pH=${sample?.pH || 7} e o regime de radiação do sítio análogo ${site?.name || ''}.`,
-      isru_resource_detection: `Analise a viabilidade de Utilização de Recursos In Situ (ISRU) na amostra "${sample?.name || ''}" — extração de água molecular a partir de sulfatos/argilas ou oxigênio a partir de óxidos de ferro/ilmenita.`,
+      selected_target_match: `Avalie a compatibilidade da amostra "${sample?.name || 'Amostra de Campo'}" (${sample?.customLocation || site?.name || 'Sítio'}) como análogo terrestre para o corpo planetário/satélite natural "${targetPlanet || 'Mars'}". Analise minerais: ${JSON.stringify(sample?.minerals || {})}, umidade aw: ${sample?.waterActivity}, pH: ${sample?.pH}, limites e oportunidades de estudo.`,
+      mars_jezero_match: `Avalie a compatibilidade da amostra "${sample?.name || 'Amostra de Campo'}" (${sample?.customLocation || site?.name || 'Sítio'}) com os estratos sedimentares do delta e cratera de Jezero (Marte). Analise minerais presentes: ${JSON.stringify(sample?.minerals || {})}, aw: ${sample?.waterActivity}, pH: ${sample?.pH}.`,
+      moon_shackleton_match: `Avalie a equivalência da amostra "${sample?.name || 'Amostra'}" com o regolito da Bacia Polo Sul-Aitken e Cratera Shackleton (Lua), focando em anortosito, piroxênio, ilmenita, pseudotaquilito e voláteis criogênicos.`,
+      europa_ice_brine_match: `Avalie a correspondência da amostra com a crosta de gelo e surgências de salmoura rica em sulfatos hidratados de Europa (Júpiter) visando o espectrômetro MISE da sonda Europa Clipper.`,
+      enceladus_serpentine_plume: `Avalie o potencial da amostra como análogo para o oceano hidrotermal de Encélado (Saturno), com foco em serpentinização abiótica, carbonatos de sódio (trona/natrão) e pH hiperalcalino.`,
+      titan_hydrocarbon_dune: `Avalie a analogia da amostra e morfologia do sítio ${sample?.customLocation || site?.name || ''} com as dunas orgânicas e lagos de Titã (Saturno) para a missão Dragonfly.`,
+      venus_supercritical_volcano: `Avalie a equivalência mineralógica com as planícies vulcânicas basálticas sob atmosfera densa de Vênus (missões VERITAS e DAVINCI).`,
+      rover_instrument_simulation: `Simule o que instrumentos de rover espacial (SuperCam, PIXL, SHERLOC) detectariam na amostra manual "${sample?.name || ''}".`,
+      extremophile_biosignature: `Analise a chance de água, habitabilidade e preservação de bioassinaturas considerando umidade aw=${sample?.waterActivity || 0.3}, pH=${sample?.pH || 7} no local ${sample?.customLocation || site?.name || ''}.`,
+      isru_resource_detection: `Analise recursos úteis no local (extração de água ou oxigênio a partir dos minerais) na amostra "${sample?.name || ''}".`,
     };
 
-    const chosenPrompt = actionPrompts[action] || `Realize um diagnóstico analítico da amostra ${sample?.name || 'geológica'} (${targetPlanet || 'Mars'}, coordenadas ${JSON.stringify(coordinates || [])}).`;
+    const chosenPrompt =
+      actionPrompts[action] ||
+      `Realize um diagnóstico analítico da amostra ${sample?.name || 'geológica'} (${targetPlanet || 'Mars'}, coordenadas ${JSON.stringify(coordinates || [])}).`;
 
-    const systemInstruction = `Você é o relator técnico da plataforma African Analogs. Forneça diagnósticos objetivos e numéricos, sem estilo de chatbot amigável.
+    const systemInstruction = `Você é o copiloto técnico da plataforma African Analogs. Forneça diagnósticos claros, objetivos e úteis em português.
 Estruture a resposta com:
-1. Resumo Executivo (2 linhas)
-2. Score de Correspondência (0-100%)
-3. Pontos Críticos de Validação
-4. Recomendação Direta para o Relatório Oficial.`;
+1. Resumo Direto (2 linhas)
+2. Avaliação dos Dados Manuais
+3. Pontos Fortes e Pontos de Atenção
+4. Recomendação Prática para o Estudo.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: chosenPrompt,
-      config: {
-        systemInstruction,
-      },
-    });
+    const { content, reasoning } = await runNemotronCompletion([
+      { role: 'system', content: systemInstruction },
+      { role: 'user', content: chosenPrompt },
+    ]);
 
-    return res.json({ result: response.text });
+    return res.json({ result: content, reasoning, model: NVIDIA_MODEL });
   } catch (error: any) {
     console.error('Erro na rota de diagnósticos:', error);
     return res.status(500).json({
@@ -337,52 +366,47 @@ Estruture a resposta com:
   }
 });
 
-// Formal Planetary Analogue Technical Report Generator (LPSC / NASA Protocol)
-app.post('/api/gemini/generate-report', async (req, res) => {
+// Formal Planetary Analogue Technical Report Generator (Copilot Draft)
+app.post(['/api/gemini/generate-report', '/api/ai/generate-report'], async (req, res) => {
   try {
     const { sample, site, visionData, attachedDiagnostics, targetPlanet, investigator } = req.body;
 
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Chave de API do Gemini não configurada.' });
-    }
-
-    const reportPrompt = `Gere um Relatório Técnico de Certificação de Sítio Análogo Planetário (Planetary Analogue Technical Report) da plataforma African Analogs no padrão formal de missões espaciais (formato Lunar and Planetary Science Conference / COSPAR):
-Investigador: ${investigator || 'Pesquisador Responsável'}
+    const reportPrompt = `Gere um Resumo Técnico de Apoio para o estudo de lugar análogo planetário na plataforma African Analogs:
+Investigador / Autor: ${investigator || 'Pesquisador Responsável'}
 Alvo Planetário: ${targetPlanet || 'Mars'}
-Sítio Análogo: ${site?.name || 'Localização de Amostragem'} (${site?.country || ''} · ${site?.location || 'Coordenadas em tempo real'})
-Fonte Oficial de Referência: ${sample?.officialSource || site?.dataSource || 'NASA PDS / SRTM DEM'}
-Amostra: ${sample?.name || 'Amostra de Regolito'}
-Classificação da Rocha: ${sample?.rockClassification || 'Regolito Vulcânico / Evaporítico'}
-Parâmetros Físico-Químicos: aw=${sample?.waterActivity}, pH=${sample?.pH}, Profundidade=${sample?.depthCm}cm
-Composição XRD/Mineral: ${JSON.stringify(sample?.minerals || {})}
-Composição XRF: ${JSON.stringify(sample?.xrfComposition || {})}
-${visionData ? `Dados de Visão Computacional: ${JSON.stringify(visionData)}` : ''}
-${attachedDiagnostics ? `Parecer Diagnóstico Anexado: ${attachedDiagnostics}` : ''}
+Lugar Informado Manualmente: ${sample?.customLocation || site?.name || 'Localização de Amostragem'} (${site?.country || ''})
+Origem dos Dados: ${sample?.officialSource || site?.dataSource || 'Registro Manual'}
+Amostra: ${sample?.name || 'Amostra de Campo'}
+Tipo de Rocha/Solo: ${sample?.rockClassification || 'Solo / Rocha Natural'}
+Parâmetros Manuais: umidade aw=${sample?.waterActivity}, pH=${sample?.pH}, Profundidade=${sample?.depthCm}cm
+Minerais Informados: ${JSON.stringify(sample?.minerals || {})}
+Composição Química: ${JSON.stringify(sample?.xrfComposition || {})}
+Notas do Autor: ${sample?.fieldNotes || ''}
+${visionData ? `Observações Visuais de Apoio: ${JSON.stringify(visionData)}` : ''}
+${attachedDiagnostics ? `Análises Anteriores do Copiloto: ${attachedDiagnostics}` : ''}
 
-Estrutura formal obrigatória:
-# CERTIFICADO DE FIDELIDADE ANÁLOGA PLANETÁRIA — AFRICAN ANALOGS
-## 1. RESUMO EXECUTIVO E IDENTIFICAÇÃO DE MISSÃO
-## 2. PARECER GEOMORFOLÓGICO & VISÃO COMPUTACIONAL
-## 3. EQUIVALÊNCIA MINERALÓGICA & GEOQUÍMICA COMPARATIVA
-## 4. ANÁLISE DE ESTRESSE AMBIENTAL & BIOASSINATURAS (ASTROBIOLOGIA)
-## 5. RECOMENDAÇÃO DE INSTRUMENTAÇÃO ESPACIAL DE CAMPO
-## 6. CONCLUSÃO & ÍNDICE FINAL DE FIDELIDADE (AFI)
+Estrutura clara em português:
+# RESUMO DA PESQUISA — AFRICAN ANALOGS
+## 1. VISÃO GERAL E LOCAL ESTUDADO
+## 2. INTERPRETAÇÃO DO SOLO, MINERAIS E UMIDADE
+## 3. SEMELHANÇAS COM ${String(targetPlanet || 'MARTE').toUpperCase()} E LIMITES DO TESTE
+## 4. RECOMENDAÇÕES PRÁTICAS PARA CONTINUAR O ESTUDO
+## 5. SUGESTÃO DE CONCLUSÃO PARA ARTIGO`;
 
-Use linguagem científica precisa em português, com termos formais (petrologia, espectrometria, albedo, habitabilidade).`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-4-hydrogen',
-      contents: reportPrompt,
-      config: {
-        systemInstruction: 'Você é um relator oficial do Planetary Science Division da NASA e ESA vinculado à plataforma African Analogs. Redija documentos técnicos completos e com rigor científico absoluto.',
+    const { content, reasoning } = await runNemotronCompletion([
+      {
+        role: 'system',
+        content:
+          'Você é o copiloto editorial da plataforma African Analogs. Redija um resumo técnico claro, organizado e fiel exclusivamente aos dados fornecidos pelo pesquisador.',
       },
-    });
+      { role: 'user', content: reportPrompt },
+    ]);
 
-    return res.json({ report: response.text });
+    return res.json({ report: content, reasoning, model: NVIDIA_MODEL });
   } catch (error: any) {
     console.error('Erro na geração de relatório:', error);
     return res.status(500).json({
-      error: error.message || 'Falha ao emitir relatório.',
+      error: error.message || 'Falha ao emitir resumo com o copiloto.',
     });
   }
 });
@@ -390,11 +414,21 @@ Use linguagem científica precisa em português, com termos formais (petrologia,
 // Hardcoded Official API Catalog, SRTM DEM Elevation & NASA EONET Live Events
 app.get('/api/official/catalog', (_req, res) => {
   return res.json({
-    endpoints: HARDCODED_OFFICIAL_APIS,
-    aiConfigured: Boolean(apiKey),
+    endpoints: HARDCODED_API_APIS_SAFE(),
+    aiConfigured: true,
+    aiModel: NVIDIA_MODEL,
+    aiProvider: 'NVIDIA NIM (Hardcoded)',
     storageMode: 'local-persistent',
   });
 });
+
+function HARDCODED_API_APIS_SAFE() {
+  return {
+    ...HARDCODED_OFFICIAL_APIS,
+    NVIDIA_NIM_BASE_URL: NVIDIA_BASE_URL,
+    NVIDIA_NIM_MODEL: NVIDIA_MODEL,
+  };
+}
 
 app.get('/api/official/elevation', async (req, res) => {
   const lat = Number(req.query.lat);

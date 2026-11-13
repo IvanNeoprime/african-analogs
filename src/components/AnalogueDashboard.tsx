@@ -13,6 +13,7 @@ import {
   Sparkles,
   Check,
   X,
+  Download,
 } from 'lucide-react';
 
 interface AnalogueDashboardProps {
@@ -58,7 +59,20 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
       .join(', ')
   );
   const [dashScores, setDashScores] = useState(activeSample.fidelityScores);
+  const [dashXrf, setDashXrf] = useState<{ [oxide: string]: number }>(
+    activeSample.xrfComposition || { SiO2: 49.8, Fe2O3: 17.2, Al2O3: 13.4, MgO: 7.9, CaO: 6.2 }
+  );
+  const [compareSiteId, setCompareSiteId] = useState<string>(selectedSite.id);
   const [dashSavedNotice, setDashSavedNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCompareSiteId(selectedSite.id);
+  }, [selectedSite.id]);
+
+  const referenceSite = useMemo(
+    () => sites.find((s) => s.id === compareSiteId) || selectedSite,
+    [sites, compareSiteId, selectedSite]
+  );
 
   useEffect(() => {
     setDashName(activeSample.name);
@@ -73,6 +87,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
         .join(', ')
     );
     setDashScores(activeSample.fidelityScores);
+    setDashXrf({ ...(activeSample.xrfComposition || { SiO2: 49.8, Fe2O3: 17.2, Al2O3: 13.4, MgO: 7.9, CaO: 6.2 }) });
   }, [activeSample, selectedSite.name]);
 
   const parseMineralsInput = (text: string): Record<string, number> => {
@@ -140,6 +155,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
       pH: Math.min(14, Math.max(0, Number(dashPh) || 7)),
       depthCm: Math.max(0, Number(dashDepth) || 0),
       minerals: mineralsMap,
+      xrfComposition: dashXrf,
       spectralCurve: generateSpectralReflectanceCurve(mineralsMap),
       fidelityScores: {
         mineralogy: Math.min(100, Math.max(0, Number(dashScores.mineralogy) || 0)),
@@ -156,6 +172,34 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
     setIsEditingDashboard(false);
     setDashSavedNotice('Dados do painel e gráficos atualizados!');
     setTimeout(() => setDashSavedNotice(null), 3500);
+  };
+
+  const handleExportCsv = () => {
+    const rows = [
+      ['Campo', 'Valor'],
+      ['Amostra', activeSample.name],
+      ['Lugar', activeSample.customLocation || selectedSite.name],
+      ['Planeta Alvo', activeSample.targetPlanet],
+      ['Semelhanca Geral (%)', String(activeSample.fidelityScores.total)],
+      ['Rochas (%)', String(activeSample.fidelityScores.mineralogy)],
+      ['Terreno (%)', String(activeSample.fidelityScores.geomorphology)],
+      ['Solo (%)', String(activeSample.fidelityScores.geochemistry)],
+      ['Sol UV (%)', String(activeSample.fidelityScores.radiation)],
+      ['Clima (%)', String(activeSample.fidelityScores.thermal)],
+      ['Umidade (aw)', String(activeSample.waterActivity)],
+      ['pH', String(activeSample.pH)],
+      ['Profundidade (cm)', String(activeSample.depthCm)],
+      ['Minerais', Object.entries(activeSample.minerals).map(([k, v]) => `${k}:${v}%`).join('; ')],
+      ['Elementos Rocha', Object.entries(activeSample.xrfComposition || {}).map(([k, v]) => `${k}:${v}%`).join('; ')],
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeSample.id}_dados_painel.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const displayLocation = activeSample.customLocation || selectedSite.name;
@@ -316,8 +360,8 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
   // Spectral Line Chart Coordinates (400nm - 2500nm)
   const sampleCurve =
-    activeSample.spectralCurve.length > 1 ? activeSample.spectralCurve : selectedSite.sampleSpectralCurve;
-  const siteCurve = selectedSite.sampleSpectralCurve;
+    activeSample.spectralCurve.length > 1 ? activeSample.spectralCurve : referenceSite.sampleSpectralCurve;
+  const siteCurve = referenceSite.sampleSpectralCurve;
 
   const mapX = (wl: number) => 42 + ((wl - 400) / (2500 - 400)) * 450;
   const mapY = (ref: number) => 152 - Math.max(0, Math.min(0.85, ref)) * 148;
@@ -357,9 +401,28 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] bg-[#F1F5F9] dark:bg-[#21262D] px-3 py-1.5 rounded-xl tabular-nums">
-              Semelhança geral: {activeSample.fidelityScores.total}%
-            </span>
+            <select
+              aria-label="Escolher referência de comparação nos gráficos"
+              value={compareSiteId}
+              onChange={(e) => setCompareSiteId(e.target.value)}
+              className="bg-[#F1F5F9] dark:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] cursor-pointer"
+            >
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  Ref.: {s.name.split(' (')[0]}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="py-1.5 px-3 rounded-xl bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#2DD4BF]" />
+              <span>CSV</span>
+            </button>
+
             {onUpdateSample && (
               <button
                 type="button"
@@ -600,6 +663,36 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                   onChange={(e) => setDashPh(parseFloat(e.target.value) || 7)}
                   className="w-full bg-[#FFFFFF] dark:bg-[#161B22] font-mono text-xs px-2.5 py-2 rounded-lg tabular-nums"
                 />
+              </div>
+            </div>
+
+            <div>
+              <span className="block text-[11px] font-medium text-[#475569] dark:text-[#94A3B8] mb-1.5">
+                Elementos da Rocha (%) — Gráfico de Barras
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {Object.entries(dashXrf).map(([oxide, val]) => (
+                  <div key={oxide}>
+                    <label htmlFor={`dash-xrf-${oxide}`} className="block text-[11px] text-[#475569] dark:text-[#94A3B8] mb-0.5">
+                      {oxide}
+                    </label>
+                    <input
+                      id={`dash-xrf-${oxide}`}
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      max={100}
+                      value={val}
+                      onChange={(e) =>
+                        setDashXrf((prev) => ({
+                          ...prev,
+                          [oxide]: parseFloat(e.target.value) || 0,
+                        }))
+                      }
+                      className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-xs px-2.5 py-1.5 rounded-lg tabular-nums"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -889,7 +982,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               })}
 
               <polygon
-                points={getRadarPolygon(selectedSite.radarAxes)}
+                points={getRadarPolygon(referenceSite.radarAxes)}
                 className="fill-[#0F766E]/12 stroke-[#0F766E] dark:stroke-[#2DD4BF]"
                 strokeWidth="1.6"
                 strokeDasharray="3 3"
@@ -911,7 +1004,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
               <span className="inline-flex items-center gap-1.5 text-[#475569] dark:text-[#94A3B8]">
                 <span className="w-3 h-0.5 border-t-2 border-dashed border-[#0F766E] dark:border-[#2DD4BF] inline-block" />
-                <span>Referência NASA ({selectedSite.name.split(' ')[0]})</span>
+                <span>Referência NASA ({referenceSite.name.split(' ')[0]})</span>
               </span>
             </div>
             <div className="text-[11px] text-center text-[#64748B] dark:text-[#8B949E]">
@@ -1021,7 +1114,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
               <span className="inline-flex items-center gap-2 text-[#475569] dark:text-[#94A3B8]">
                 <span className="w-5 h-0.5 border-t-2 border-dashed border-[#0F766E] dark:border-[#2DD4BF] inline-block" />
-                <span>Padrão NASA ({selectedSite.name})</span>
+                <span>Padrão NASA ({referenceSite.name})</span>
               </span>
             </div>
             <span className="text-[11px] text-[#64748B] dark:text-[#8B949E]">

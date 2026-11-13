@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AnalogueSite,
   CollaboratorProfile,
@@ -7,6 +7,12 @@ import {
   LocalUserAccount,
   PlanetaryTarget,
 } from '../types';
+import {
+  CELESTIAL_BODIES,
+  DWARF_PLANET_BODIES,
+  PLANET_BODIES,
+  SATELLITE_BODIES,
+} from '../data/celestialBodies';
 import {
   generateDynamicAvatarSvg,
   normalizeCodename,
@@ -58,14 +64,8 @@ interface AccountEcosystemViewProps {
   onOpenMyProfileInNetwork: (profileId: string) => void;
 }
 
-const PLANET_OPTIONS: { value: PlanetaryTarget; label: string }[] = [
-  { value: 'Mars', label: 'Marte' },
-  { value: 'Moon', label: 'Lua' },
-  { value: 'Europa', label: 'Europa' },
-  { value: 'Enceladus', label: 'Encélado' },
-  { value: 'Titan', label: 'Titã' },
-  { value: 'Venus', label: 'Vênus' },
-];
+const QUICK_PLANET_OPTIONS = CELESTIAL_BODIES.filter((b) => b.featuredInQuickList);
+const EXTENDED_CELESTIAL_OPTIONS = CELESTIAL_BODIES.filter((b) => !b.featuredInQuickList);
 
 async function resizeAvatarImage(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -293,14 +293,17 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
     setShowChartEditor(true);
   };
 
+  const lastHandledPublishRef = useRef(0);
+
   useEffect(() => {
-    if (publishTriggerCount > 0 && currentUser) {
+    if (publishTriggerCount > lastHandledPublishRef.current && currentUser) {
+      lastHandledPublishRef.current = publishTriggerCount;
       setEditingSampleId(null);
       setProfileSection('publish');
       loadManualActiveSampleToForm();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publishTriggerCount]);
+  }, [publishTriggerCount, currentUser]);
 
   const myPublishedSamples = useMemo(() => {
     if (!currentUser) return [];
@@ -924,29 +927,53 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     </div>
                   </div>
 
-                  <div>
-                    <span className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1.5">
-                      Planetas que você mais gosta
+                  <div className="space-y-2">
+                    <span className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
+                      Planetas e satélites naturais de interesse
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {PLANET_OPTIONS.map((p) => {
-                        const active = regPlanets.includes(p.value);
+                      {QUICK_PLANET_OPTIONS.map((p) => {
+                        const active = regPlanets.includes(p.id);
                         return (
                           <button
-                            key={p.value}
+                            key={p.id}
                             type="button"
-                            onClick={() => togglePlanetSelection(setRegPlanets, p.value)}
+                            onClick={() => togglePlanetSelection(setRegPlanets, p.id)}
                             className={`py-1.5 px-3 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                               active
                                 ? 'bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF]'
                                 : 'bg-[#F1F5F9] dark:bg-[#0D1117] text-[#475569] dark:text-[#94A3B8]'
                             }`}
                           >
-                            {p.label}
+                            {p.namePt}
                           </button>
                         );
                       })}
                     </div>
+                    <details className="rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2.5">
+                      <summary className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer select-none">
+                        Ver todos os planetas e satélites naturais ({EXTENDED_CELESTIAL_OPTIONS.length}+)
+                      </summary>
+                      <div className="flex flex-wrap gap-1.5 pt-2">
+                        {EXTENDED_CELESTIAL_OPTIONS.map((p) => {
+                          const active = regPlanets.includes(p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => togglePlanetSelection(setRegPlanets, p.id)}
+                              className={`py-1 px-2.5 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                                active
+                                  ? 'bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF]'
+                                  : 'bg-[#FFFFFF] dark:bg-[#161B22] text-[#475569] dark:text-[#94A3B8]'
+                              }`}
+                            >
+                              {p.hostBodyPt ? `${p.namePt} (${p.hostBodyPt})` : p.namePt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </details>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -1455,7 +1482,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
               <div>
                 <label htmlFor="pub-planet" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Parece com qual planeta?
+                  Parece com qual planeta ou satélite natural?
                 </label>
                 <select
                   id="pub-planet"
@@ -1463,11 +1490,27 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   onChange={(e) => setStudyPlanet(e.target.value as PlanetaryTarget)}
                   className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 >
-                  {PLANET_OPTIONS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
+                  <optgroup label="Planetas do Sistema Solar">
+                    {PLANET_BODIES.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.optionLabel}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Planetas Anões">
+                    {DWARF_PLANET_BODIES.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.optionLabel}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Satélites Naturais (Luas)">
+                    {SATELLITE_BODIES.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.optionLabel}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>
@@ -1786,29 +1829,53 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   />
                 </div>
 
-                <div>
-                  <span className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1.5">
-                    Planetas de Interesse
+                <div className="space-y-2">
+                  <span className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
+                    Planetas e Satélites de Interesse
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {PLANET_OPTIONS.map((p) => {
-                      const active = editPlanets.includes(p.value);
+                    {QUICK_PLANET_OPTIONS.map((p) => {
+                      const active = editPlanets.includes(p.id);
                       return (
                         <button
-                          key={p.value}
+                          key={p.id}
                           type="button"
-                          onClick={() => togglePlanetSelection(setEditPlanets, p.value)}
+                          onClick={() => togglePlanetSelection(setEditPlanets, p.id)}
                           className={`py-1.5 px-3 rounded-lg text-xs font-medium cursor-pointer ${
                             active
                               ? 'bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF]'
                               : 'bg-[#F1F5F9] dark:bg-[#0D1117] text-[#475569] dark:text-[#94A3B8]'
                           }`}
                         >
-                          {p.label}
+                          {p.namePt}
                         </button>
                       );
                     })}
                   </div>
+                  <details className="rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2.5">
+                    <summary className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer select-none">
+                      Mais planetas e satélites naturais ({EXTENDED_CELESTIAL_OPTIONS.length}+)
+                    </summary>
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {EXTENDED_CELESTIAL_OPTIONS.map((p) => {
+                        const active = editPlanets.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => togglePlanetSelection(setEditPlanets, p.id)}
+                            className={`py-1 px-2.5 rounded-lg text-[11px] font-medium cursor-pointer ${
+                              active
+                                ? 'bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF]'
+                                : 'bg-[#FFFFFF] dark:bg-[#161B22] text-[#475569] dark:text-[#94A3B8]'
+                            }`}
+                          >
+                            {p.hostBodyPt ? `${p.namePt} (${p.hostBodyPt})` : p.namePt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </details>
                 </div>
 
                 <div>

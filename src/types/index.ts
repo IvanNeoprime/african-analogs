@@ -1,4 +1,36 @@
-export type PlanetaryTarget = 'Mars' | 'Moon' | 'Europa' | 'Enceladus' | 'Titan' | 'Venus' | 'Both';
+export type PlanetaryTarget =
+  | 'Mercury'
+  | 'Venus'
+  | 'Earth'
+  | 'Mars'
+  | 'Jupiter'
+  | 'Saturn'
+  | 'Uranus'
+  | 'Neptune'
+  | 'Ceres'
+  | 'Pluto'
+  | 'Moon'
+  | 'Phobos'
+  | 'Deimos'
+  | 'Io'
+  | 'Europa'
+  | 'Ganymede'
+  | 'Callisto'
+  | 'Mimas'
+  | 'Enceladus'
+  | 'Tethys'
+  | 'Dione'
+  | 'Rhea'
+  | 'Titan'
+  | 'Iapetus'
+  | 'Miranda'
+  | 'Ariel'
+  | 'Umbriel'
+  | 'Titania'
+  | 'Oberon'
+  | 'Triton'
+  | 'Charon'
+  | 'Both';
 
 export interface SpectralPoint {
   wavelengthNm: number;

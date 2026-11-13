@@ -1,13 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { AnalogueSite, CollaboratorProfile, GeologicalSample, LatestAiAnalysisSnapshot, PlanetaryTarget } from '../types';
-import { HARDCODED_API_ENDPOINTS, fetchOfficialElevation } from '../services/officialApis';
+import { HARDCODED_API_ENDPOINTS, fetchOfficialElevation, fetchOfficialNasaEvents, NasaEonetEventItem } from '../services/officialApis';
 import {
   computeAnalogueFidelity,
   generateSpectralReflectanceCurve,
   parseUserInjectedData,
 } from '../services/spectralEngine';
 import { AnalogueDashboard } from './AnalogueDashboard';
+import { NasaDataShortcutsModal, NasaShortcutFilter } from './NasaDataShortcutsModal';
+import {
+  DWARF_PLANET_BODIES,
+  getCelestialBodyFullLabel,
+  getCelestialBodyLabel,
+  PLANET_BODIES,
+  SATELLITE_BODIES,
+} from '../data/celestialBodies';
 import {
   Camera,
   MapPin,
@@ -37,6 +45,8 @@ import {
   EyeOff,
   FileCode2,
   Sparkles,
+  Search,
+  Flame,
 } from 'lucide-react';
 import {
   processUploadedScientificImage,
@@ -49,10 +59,98 @@ import {
 interface ChatMessage {
   role: 'user' | 'model';
   content: string;
+  reasoning?: string;
   attachmentName?: string;
 }
 
+interface VisualTelemetry {
+  width: number;
+  height: number;
+  meanRed: number;
+  meanGreen: number;
+  meanBlue: number;
+  brightnessAlbedo: number;
+  ironOxideIndex: number;
+  surfaceContrast: number;
+  dominantColorTag: string;
+}
+
+async function extractVisualTelemetry(dataUrl: string): Promise<VisualTelemetry | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const sampleSize = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = sampleSize;
+        canvas.height = sampleSize;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, sampleSize, sampleSize);
+        const { data } = ctx.getImageData(0, 0, sampleSize, sampleSize);
+        const totalPx = sampleSize * sampleSize;
+        let sumR = 0;
+        let sumG = 0;
+        let sumB = 0;
+        const lumList: number[] = [];
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          sumR += r;
+          sumG += g;
+          sumB += b;
+          lumList.push((0.299 * r + 0.587 * g + 0.114 * b) / 255);
+        }
+
+        const meanRed = Math.round(sumR / totalPx);
+        const meanGreen = Math.round(sumG / totalPx);
+        const meanBlue = Math.round(sumB / totalPx);
+        const meanLum = lumList.reduce((a, b) => a + b, 0) / totalPx;
+        const variance =
+          lumList.reduce((acc, l) => acc + Math.pow(l - meanLum, 2), 0) / totalPx;
+        const surfaceContrast = Math.round(Math.sqrt(variance) * 100) / 100;
+        const brightnessAlbedo = Math.round(meanLum * 100) / 100;
+        const ironOxideIndex =
+          Math.round(((meanRed - meanBlue) / (meanRed + meanBlue + 1)) * 100) / 100;
+
+        let dominantColorTag = 'Terreno neutro / rocha cinza';
+        if (brightnessAlbedo >= 0.72) {
+          dominantColorTag = 'Crosta clara evaporítica / salina ou gelo brilhante';
+        } else if (brightnessAlbedo <= 0.28) {
+          dominantColorTag = 'Rocha escura basáltica / vulcânica';
+        } else if (ironOxideIndex >= 0.18 && meanRed > meanBlue + 25) {
+          dominantColorTag = 'Solo/rocha avermelhada ou ocre (óxido de ferro)';
+        } else if (meanRed > 150 && meanGreen > 125 && meanBlue < 120) {
+          dominantColorTag = 'Areia desértica / regolito ocre-amarelado';
+        }
+
+        resolve({
+          width: img.naturalWidth || img.width,
+          height: img.naturalHeight || img.height,
+          meanRed,
+          meanGreen,
+          meanBlue,
+          brightnessAlbedo,
+          ironOxideIndex,
+          surfaceContrast,
+          dominantColorTag,
+        });
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
 type DiagnosticPathway =
+  | 'selected_target_match'
   | 'mars_jezero_match'
   | 'moon_shackleton_match'
   | 'europa_ice_brine_match'
@@ -181,6 +279,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const [isAnalyzingVision, setIsAnalyzingVision] = useState(false);
   const [visionResult, setVisionResult] = useState<any | null>(visionData);
   const [visionError, setVisionError] = useState<string | null>(null);
+  const [visualTelemetry, setVisualTelemetry] = useState<VisualTelemetry | null>(null);
+  const [visualNotes, setVisualNotes] = useState('');
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -218,18 +318,30 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     };
   }, []);
 
-  // --- Map States (NASA SRTM DEM Topography Default) ---
+  // --- Map States (NASA SRTM DEM Topography Default + Live NASA EONET Events) ---
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const [layerType, setLayerType] = useState<'topo' | 'gibs_satellite'>('topo');
   const [filterRegionOrPlanet, setFilterRegionOrPlanet] = useState<string>('ALL');
+  const [siteSearchQuery, setSiteSearchQuery] = useState('');
+  const [showNasaEvents, setShowNasaEvents] = useState(false);
+  const [nasaEvents, setNasaEvents] = useState<NasaEonetEventItem[]>([]);
+  const [nasaEventsLoading, setNasaEventsLoading] = useState(false);
+  const [showNasaModal, setShowNasaModal] = useState(false);
+  const [nasaModalFilter, setNasaModalFilter] = useState<NasaShortcutFilter>('all');
+
+  const openNasaShortcuts = (filter: NasaShortcutFilter = 'all') => {
+    setNasaModalFilter(filter);
+    setShowNasaModal(true);
+  };
 
   // --- Integrated AI Diagnostics & Report States ---
   const [selectedPathway, setSelectedPathway] = useState<DiagnosticPathway>('mars_jezero_match');
   const [isDiagLoading, setIsDiagLoading] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(attachedDiagnostics);
+  const [diagReasoning, setDiagReasoning] = useState<string | null>(null);
   const [diagError, setDiagError] = useState<string | null>(null);
 
   const [reportText, setReportText] = useState<string | null>(null);
@@ -240,9 +352,22 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const reportSectionRef = useRef<HTMLElement>(null);
 
   const filteredSites = sites.filter((s) => {
-    if (filterRegionOrPlanet === 'ALL') return true;
-    if (filterRegionOrPlanet === 'AFRICA') return s.region === 'África';
-    return s.targetPlanet === filterRegionOrPlanet || s.targetPlanet === 'Both';
+    const regionOk =
+      filterRegionOrPlanet === 'ALL'
+        ? true
+        : filterRegionOrPlanet === 'AFRICA'
+        ? s.region === 'África'
+        : s.targetPlanet === filterRegionOrPlanet || s.targetPlanet === 'Both';
+    if (!regionOk) return false;
+    const q = siteSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.country.toLowerCase().includes(q) ||
+      s.region.toLowerCase().includes(q) ||
+      s.targetPlanet.toLowerCase().includes(q) ||
+      s.primaryMinerals.some((m) => m.toLowerCase().includes(q))
+    );
   });
 
   // Init Leaflet Map
@@ -335,14 +460,62 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       marker.bindTooltip(
         `<div style="font-family: 'Roboto', sans-serif; font-size: 12px; padding: 2px 4px;">
            <strong>${site.name}</strong><br/>
-           <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: 0.8;">${site.targetPlanet} · AFI ${site.fidelityScore}%</span>
+           <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: 0.8;">${site.targetPlanet} · Semelhança ${site.fidelityScore}%</span>
          </div>`,
         { direction: 'top' }
       );
 
       layer.addLayer(marker);
     });
-  }, [filteredSites, selectedSite, onSelectSite]);
+
+    if (showNasaEvents) {
+      nasaEvents.forEach((ev) => {
+        if (!ev.coordinates) return;
+        const evIcon = L.divIcon({
+          className: 'nasa-eonet-pin',
+          html: `<div style="width:18px;height:18px;border-radius:50%;background:#D97706;border:2px solid #FFFFFF;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);">!</div>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        const evMarker = L.marker(ev.coordinates, { icon: evIcon });
+        evMarker.bindTooltip(
+          `<div style="font-family: 'Roboto', sans-serif; font-size: 11px; padding: 2px 4px;">
+             <strong>NASA EONET: ${ev.title}</strong><br/>
+             <span>${ev.category}${ev.date ? ` · ${ev.date}` : ''}</span>
+           </div>`,
+          { direction: 'top' }
+        );
+        layer.addLayer(evMarker);
+      });
+    }
+  }, [filteredSites, selectedSite, onSelectSite, showNasaEvents, nasaEvents]);
+
+  const handleToggleNasaEvents = async () => {
+    const next = !showNasaEvents;
+    setShowNasaEvents(next);
+    if (next && nasaEvents.length === 0) {
+      setNasaEventsLoading(true);
+      try {
+        const list = await fetchOfficialNasaEvents();
+        setNasaEvents(list);
+      } finally {
+        setNasaEventsLoading(false);
+      }
+    }
+  };
+
+  const handleActivateNasaEventsOnMap = async () => {
+    setShowNasaEvents(true);
+    if (nasaEvents.length === 0) {
+      setNasaEventsLoading(true);
+      try {
+        const list = await fetchOfficialNasaEvents();
+        setNasaEvents(list);
+      } finally {
+        setNasaEventsLoading(false);
+      }
+    }
+  };
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
@@ -470,7 +643,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       }
 
       const data = await response.json();
-      setChatHistory([...nextHistory, { role: 'model', content: data.reply || 'Análise concluída.' }]);
+      setChatHistory([
+        ...nextHistory,
+        {
+          role: 'model',
+          content: data.reply || 'Análise concluída.',
+          reasoning: data.reasoning || undefined,
+        },
+      ]);
       if (data.reply) {
         onAttachDiagnostics(data.reply);
         onUpdateAiSnapshot?.({
@@ -587,6 +767,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       setVisionResult(null);
       setPendingEncryptedFile(null);
       setShowDecryptPanel(false);
+      extractVisualTelemetry(processed.dataUrl).then((tel) => setVisualTelemetry(tel));
 
       if (processed.metadata.geoCoords) {
         setCurrentCoords(processed.metadata.geoCoords);
@@ -718,15 +899,19 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     setVisionResult(null);
     stopCameraStream();
 
+    const capturedTel = await extractVisualTelemetry(capturedDataUrl);
+    setVisualTelemetry(capturedTel);
+
     if (analyzeImmediately) {
-      await handleRunVisionAnalysis(capturedDataUrl, 'image/jpeg', null);
+      await handleRunVisionAnalysis(capturedDataUrl, 'image/jpeg', null, capturedTel);
     }
   };
 
   const handleRunVisionAnalysis = async (
     imageOverride?: string,
     mimeOverride?: string,
-    rasterOverride?: DecodedImageMetadata | null
+    rasterOverride?: DecodedImageMetadata | null,
+    telemetryOverride?: VisualTelemetry | null
   ) => {
     const targetImg = imageOverride || uploadedImage;
     if (!targetImg) {
@@ -742,6 +927,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         ? currentCoords || { lat: selectedSite.coordinates[0], lng: selectedSite.coordinates[1] }
         : undefined;
 
+      const resolvedTelemetry =
+        telemetryOverride !== undefined
+          ? telemetryOverride
+          : visualTelemetry || (await extractVisualTelemetry(targetImg));
+      if (resolvedTelemetry && !visualTelemetry) {
+        setVisualTelemetry(resolvedTelemetry);
+      }
+
       const response = await fetch(HARDCODED_API_ENDPOINTS.BACKEND_VISION, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -751,6 +944,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           coordinates: coordsToUse,
           targetPlanet,
           rasterMetadata: rasterOverride !== undefined ? rasterOverride : rasterMetadata,
+          visualTelemetry: resolvedTelemetry,
+          visualNotes: visualNotes.trim() || undefined,
         }),
       });
 
@@ -787,7 +982,19 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   };
 
   // Execute Specialized AI Diagnostic Pathway
+  const activeTargetLabel = getCelestialBodyFullLabel(activeSample.targetPlanet);
   const pathways: { id: DiagnosticPathway; category: string; title: string; description: string; primary?: boolean }[] = [
+    ...(activeSample.targetPlanet !== 'Mars' && activeSample.targetPlanet !== 'Moon'
+      ? [
+          {
+            id: 'selected_target_match' as DiagnosticPathway,
+            category: getCelestialBodyLabel(activeSample.targetPlanet),
+            title: `Comparar com ${activeTargetLabel}`,
+            description: `Avalia os dados manuais, minerais e ambiente da amostra para o estudo de ${activeTargetLabel}.`,
+            primary: true,
+          },
+        ]
+      : []),
     {
       id: 'mars_jezero_match',
       category: 'Marte',
@@ -872,6 +1079,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
       const data = await response.json();
       setDiagnosticResult(data.result);
+      setDiagReasoning(data.reasoning || null);
       onAttachDiagnostics(data.result);
       onUpdateAiSnapshot?.({
         targetPlanet: activeSample.targetPlanet,
@@ -967,6 +1175,15 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => openNasaShortcuts('all')}
+            className="min-h-[40px] py-2 px-3.5 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl transition-colors duration-150 flex items-center gap-2 cursor-pointer whitespace-nowrap"
+          >
+            <Satellite className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
+            <span>Fontes da NASA</span>
+          </button>
+
           <label className="min-h-[40px] py-2 px-3.5 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl transition-colors duration-150 flex items-center gap-2 cursor-pointer whitespace-nowrap">
             <Upload className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
             <span>Importar Planilha</span>
@@ -1110,10 +1327,10 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               </button>
             </div>
 
-            {/* Target Planet Dropdown Selector */}
+            {/* Target Planet & Natural Satellite Dropdown Selector */}
             <div className="space-y-1.5">
               <label htmlFor="u-target-planet-select" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block">
-                Comparar com qual planeta ou lua?
+                Comparar com qual planeta ou satélite natural?
               </label>
               <select
                 id="u-target-planet-select"
@@ -1121,12 +1338,27 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 onChange={(e) => setTargetPlanet(e.target.value as PlanetaryTarget)}
                 className="w-full min-h-[40px] bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm font-medium px-3.5 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] cursor-pointer"
               >
-                <option value="Mars">Marte (Planeta Vermelho)</option>
-                <option value="Moon">Lua (Superfície Lunar)</option>
-                <option value="Europa">Europa (Lua gelada de Júpiter)</option>
-                <option value="Enceladus">Encélado (Lua com oceano de Saturno)</option>
-                <option value="Titan">Titã (Maior lua de Saturno)</option>
-                <option value="Venus">Vênus (Planeta vulcânico)</option>
+                <optgroup label="Planetas do Sistema Solar">
+                  {PLANET_BODIES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.optionLabel}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Planetas Anões">
+                  {DWARF_PLANET_BODIES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.optionLabel}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Satélites Naturais (Luas)">
+                  {SATELLITE_BODIES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.optionLabel}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -1180,6 +1412,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] shrink-0">Escolher</span>
                     <input type="file" accept=".csv,.json,.txt,.md,.tsv" onChange={handleDocumentUploadSafe(handleDocumentAttach)} className="sr-only" />
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => openNasaShortcuts('datasets')}
+                    className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Satellite className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
+                    <span>Não tem planilha? Ver onde baixar dados CSV/JSON da NASA</span>
+                  </button>
                 </div>
 
                 <div className="space-y-1.5">
@@ -1219,6 +1459,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           {msg.attachmentName ? ` · ${msg.attachmentName}` : ''}
                         </div>
                         {msg.content}
+                        {msg.reasoning && (
+                          <details className="mt-2 pt-1.5 text-[11px] text-[#475569] dark:text-[#94A3B8]">
+                            <summary className="cursor-pointer font-medium hover:text-[#0F172A] dark:hover:text-[#F0F6FC] select-none">
+                              Ver raciocínio da IA
+                            </summary>
+                            <div className="mt-1 whitespace-pre-wrap opacity-90">{msg.reasoning}</div>
+                          </details>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1346,9 +1594,19 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     </div>
 
                     <div>
-                      <label htmlFor="u-source" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                        Origem dos Dados
-                      </label>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <label htmlFor="u-source" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
+                          Origem dos Dados
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => openNasaShortcuts('datasets')}
+                          className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Satellite className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
+                          <span>Não tem dados? Achar fontes NASA</span>
+                        </button>
+                      </div>
                       <input
                         id="u-source"
                         type="text"
@@ -1420,12 +1678,24 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className="w-full min-h-[42px] py-2 px-4 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-sm font-medium rounded-xl transition-colors cursor-pointer"
-              >
-                Salvar Dados Manuais no Painel
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 min-h-[42px] py-2 px-4 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-sm font-medium rounded-xl transition-colors cursor-pointer"
+                >
+                  Salvar Dados Manuais no Painel
+                </button>
+                {onOpenPublishFromAi && (
+                  <button
+                    type="button"
+                    onClick={onOpenPublishFromAi}
+                    className="min-h-[42px] py-2 px-4 bg-[#0F766E] dark:bg-[#0D9488] hover:bg-[#0D9488] text-[#FFFFFF] text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    <span>Publicar Artigo</span>
+                  </button>
+                )}
+              </div>
             </form>
           )}
 
@@ -1671,21 +1941,57 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         </div>
                       </details>
                     )}
+                    {visualTelemetry && (
+                      <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] text-[11px] text-[#475569] dark:text-[#94A3B8] space-y-1">
+                        <div className="font-medium text-[#0F172A] dark:text-[#F0F6FC]">
+                          Cor predominante medida: {visualTelemetry.dominantColorTag}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono tabular-nums">
+                          <span>Brilho/Albedo: {Math.round(visualTelemetry.brightnessAlbedo * 100)}%</span>
+                          <span>Índice Ferro: {visualTelemetry.ironOxideIndex}</span>
+                          <span>Textura/Contraste: {visualTelemetry.surfaceContrast}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label htmlFor="vision-notes" className="sr-only">
+                        Observação rápida sobre a foto
+                      </label>
+                      <input
+                        id="vision-notes"
+                        type="text"
+                        value={visualNotes}
+                        onChange={(e) => setVisualNotes(e.target.value)}
+                        placeholder="Opcional: descreva o que vê na foto (ex.: rocha porosa vermelha)..."
+                        className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+                      />
+                    </div>
                   </div>
                 ) : !showDecryptPanel ? (
-                  <button
-                    type="button"
-                    onClick={handleOpenCamera}
-                    className="w-full min-h-[168px] rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] hover:bg-[#F1F5F9] dark:hover:bg-[#21262D] transition-colors p-6 flex flex-col items-center justify-center text-center cursor-pointer"
-                  >
-                    <Camera className="w-6 h-6 text-[#1E3A8A] dark:text-[#60A5FA] mb-2" strokeWidth={1.75} aria-hidden="true" />
-                    <span className="text-sm font-medium text-[#0F172A] dark:text-[#F0F6FC]">
-                      Abrir Câmera ou Enviar Foto
-                    </span>
-                    <span className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
-                      Tire foto de uma pedra, solo ou envie fotos e imagens de satélite (incluindo arquivos TIFF ou protegidos por senha).
-                    </span>
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={handleOpenCamera}
+                      className="w-full min-h-[168px] rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] hover:bg-[#F1F5F9] dark:hover:bg-[#21262D] transition-colors p-6 flex flex-col items-center justify-center text-center cursor-pointer"
+                    >
+                      <Camera className="w-6 h-6 text-[#1E3A8A] dark:text-[#60A5FA] mb-2" strokeWidth={1.75} aria-hidden="true" />
+                      <span className="text-sm font-medium text-[#0F172A] dark:text-[#F0F6FC]">
+                        Abrir Câmera ou Enviar Foto
+                      </span>
+                      <span className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
+                        Tire foto de uma pedra, solo ou envie fotos e imagens de satélite (incluindo arquivos TIFF ou protegidos por senha).
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openNasaShortcuts('imagery')}
+                      className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Satellite className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
+                      <span>Sem foto ou mapa GeoTIFF? Ver fontes de imagens da NASA</span>
+                    </button>
+                  </div>
                 ) : null}
 
                 {visionError && (
@@ -1696,7 +2002,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 )}
 
                 {visionResult && (
-                  <div aria-live="polite" className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] space-y-1.5 text-xs">
+                  <div aria-live="polite" className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] space-y-2 text-xs">
                     <div className="text-[11px] font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">
                       Parecer do Copiloto Visual IA (não altera seus dados manuais)
                     </div>
@@ -1710,6 +2016,34 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     <div className="text-[#475569] dark:text-[#94A3B8]">
                       Minerais sugeridos para conferir: {visionResult.minerals?.join(' · ')}
                     </div>
+                    {visionResult.diagnosis && (
+                      <p className="text-[#0F172A] dark:text-[#E2E8F0] leading-relaxed">
+                        {visionResult.diagnosis}
+                      </p>
+                    )}
+                    {visionResult.minerals?.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const suggested = visionResult.minerals
+                            .slice(0, 4)
+                            .map((m: string, idx: number, arr: string[]) => `${m}: ${Math.round(100 / arr.length)}`)
+                            .join(', ');
+                          setMineralsManualText(suggested);
+                          setMinerals(parseManualMineralsInput(suggested));
+                          setInputMode('data_form');
+                        }}
+                        className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#1E3A8A] dark:text-[#60A5FA] font-medium shadow-xs cursor-pointer"
+                      >
+                        Usar minerais sugeridos no meu formulário manual
+                      </button>
+                    )}
+                    {visionResult.reasoning && (
+                      <details className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
+                        <summary className="cursor-pointer font-medium select-none">Ver raciocínio da IA</summary>
+                        <div className="mt-1 whitespace-pre-wrap">{visionResult.reasoning}</div>
+                      </details>
+                    )}
                   </div>
                 )}
               </div>
@@ -1774,20 +2108,52 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               </button>
             </div>
 
-            <select
-              aria-label="Filtrar lugares no mapa"
-              value={filterRegionOrPlanet}
-              onChange={(e) => setFilterRegionOrPlanet(e.target.value)}
-              className="bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
-            >
-              <option value="ALL">Todos os lugares ({sites.length})</option>
-              <option value="AFRICA">Na África ({sites.filter((s) => s.region === 'África').length})</option>
-              <option value="Mars">Parecidos com Marte</option>
-              <option value="Moon">Parecidos com a Lua</option>
-              <option value="Europa">Parecidos com Europa</option>
-              <option value="Enceladus">Parecidos com Encélado</option>
-              <option value="Titan">Parecidos com Titã</option>
-            </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                aria-pressed={showNasaEvents}
+                onClick={handleToggleNasaEvents}
+                className={`py-2 px-3 text-xs font-medium rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  showNasaEvents
+                    ? 'bg-[#D97706] text-[#FFFFFF]'
+                    : 'bg-[#F1F5F9] dark:bg-[#0D1117] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC]'
+                }`}
+              >
+                <Flame className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <span>{nasaEventsLoading ? 'Carregando NASA...' : 'Eventos NASA'}</span>
+              </button>
+
+              <select
+                aria-label="Filtrar lugares no mapa"
+                value={filterRegionOrPlanet}
+                onChange={(e) => setFilterRegionOrPlanet(e.target.value)}
+                className="bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
+              >
+                <option value="ALL">Todos os lugares ({sites.length})</option>
+                <option value="AFRICA">Na África ({sites.filter((s) => s.region === 'África').length})</option>
+                <optgroup label="Planetas">
+                  {PLANET_BODIES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Parecidos com {b.namePt}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Planetas Anões">
+                  {DWARF_PLANET_BODIES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Parecidos com {b.namePt}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Satélites Naturais (Luas)">
+                  {SATELLITE_BODIES.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Parecidos com {b.namePt} ({b.hostBodyPt})
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
           </div>
 
           <div
@@ -1969,8 +2335,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             </button>
 
             {diagnosticResult && (
-              <div aria-live="polite" className="p-4 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl text-xs sm:text-sm font-sans text-[#0F172A] dark:text-[#E2E8F0] whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
-                {diagnosticResult}
+              <div aria-live="polite" className="p-4 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl text-xs sm:text-sm font-sans text-[#0F172A] dark:text-[#E2E8F0] whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto space-y-2">
+                <div>{diagnosticResult}</div>
+                {diagReasoning && (
+                  <details className="text-[11px] text-[#475569] dark:text-[#94A3B8] pt-1">
+                    <summary className="cursor-pointer font-medium select-none">Ver raciocínio da IA</summary>
+                    <div className="mt-1 whitespace-pre-wrap">{diagReasoning}</div>
+                  </details>
+                )}
               </div>
             )}
           </div>
@@ -2093,13 +2465,26 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
       {/* BENTO ROW 4: OFFICIAL SITES CATALOGUE BOWL (Stroke-free) */}
       <section aria-labelledby="catalog-heading" className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs space-y-4 transition-colors duration-150">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="catalog-heading" className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-            Lugares Parecidos no Mundo ({filteredSites.length})
-          </h2>
-          <span className="text-xs text-[#475569] dark:text-[#94A3B8] bg-[#F1F5F9] dark:bg-[#21262D] px-3 py-1 rounded-xl">
-            Clique em um lugar para ver no mapa e nos gráficos
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="catalog-heading" className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
+              Lugares Parecidos no Mundo ({filteredSites.length})
+            </h2>
+            <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
+              Clique em um lugar para abrir no mapa e comparar nos gráficos.
+            </p>
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+            <input
+              type="text"
+              aria-label="Buscar lugar ou mineral no catálogo"
+              value={siteSearchQuery}
+              onChange={(e) => setSiteSearchQuery(e.target.value)}
+              placeholder="Buscar lugar, país ou mineral..."
+              className="w-full bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] text-xs pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2">
@@ -2164,6 +2549,16 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           </table>
         </div>
       </section>
+
+      <NasaDataShortcutsModal
+        isOpen={showNasaModal}
+        initialCategory={nasaModalFilter}
+        selectedSite={selectedSite}
+        currentCoords={currentCoords}
+        targetPlanet={targetPlanet}
+        onClose={() => setShowNasaModal(false)}
+        onActivateNasaEventsOnMap={handleActivateNasaEventsOnMap}
+      />
     </div>
   );
 };

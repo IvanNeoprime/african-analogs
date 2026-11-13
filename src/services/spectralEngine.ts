@@ -1,4 +1,5 @@
-import { GeologicalSample, SpectralPoint } from '../types';
+import { GeologicalSample, PlanetaryTarget, SpectralPoint } from '../types';
+import { CELESTIAL_BODIES } from '../data/celestialBodies';
 
 export interface MultispectralBands {
   blue: number;      // ~480nm (Band 2 Landsat 8/Sentinel-2)
@@ -115,7 +116,7 @@ export function generateSpectralReflectanceCurve(
 // Compute Planetary Analogue Fidelity Index (AFI)
 export function computeAnalogueFidelity(
   sample: Partial<GeologicalSample>,
-  targetPlanet: 'Mars' | 'Moon' | 'Europa' | 'Enceladus' | 'Titan' | 'Venus' | 'Both'
+  targetPlanet: PlanetaryTarget
 ): {
   mineralogy: number;
   geomorphology: number;
@@ -131,13 +132,13 @@ export function computeAnalogueFidelity(
   let thermScore = 78;
 
   const minerals = sample.minerals || {};
-  const mineralKeys = Object.keys(minerals).map(k => k.toLowerCase());
+  const mineralKeys = Object.keys(minerals).map((k) => k.toLowerCase());
 
   if (targetPlanet === 'Mars' || targetPlanet === 'Both') {
-    if (mineralKeys.some(k => k.includes('perclorat') || k.includes('clorat'))) minScore += 8;
-    if (mineralKeys.some(k => k.includes('gesso') || k.includes('anidrit') || k.includes('sulfat'))) minScore += 6;
-    if (mineralKeys.some(k => k.includes('hematit') || k.includes('jarosit'))) minScore += 5;
-    if (mineralKeys.some(k => k.includes('argil') || k.includes('esmectit'))) minScore += 4;
+    if (mineralKeys.some((k) => k.includes('perclorat') || k.includes('clorat'))) minScore += 8;
+    if (mineralKeys.some((k) => k.includes('gesso') || k.includes('anidrit') || k.includes('sulfat'))) minScore += 6;
+    if (mineralKeys.some((k) => k.includes('hematit') || k.includes('jarosit') || k.includes('ferro'))) minScore += 5;
+    if (mineralKeys.some((k) => k.includes('argil') || k.includes('esmectit'))) minScore += 4;
 
     if (sample.waterActivity !== undefined) {
       if (sample.waterActivity < 0.35) chemScore += 10;
@@ -145,28 +146,59 @@ export function computeAnalogueFidelity(
       else chemScore -= 8;
     }
     if (sample.pH !== undefined && (sample.pH < 3.5 || sample.pH > 9.0)) chemScore += 6;
-  } else if (targetPlanet === 'Moon') {
-    if (mineralKeys.some(k => k.includes('plagiocl') || k.includes('anortosit'))) minScore += 9;
-    if (mineralKeys.some(k => k.includes('pirox') || k.includes('augita'))) minScore += 6;
-    if (mineralKeys.some(k => k.includes('ilmenit'))) minScore += 6;
+  } else if (targetPlanet === 'Moon' || targetPlanet === 'Mercury' || targetPlanet === 'Phobos' || targetPlanet === 'Deimos') {
+    if (mineralKeys.some((k) => k.includes('plagiocl') || k.includes('anortosit') || k.includes('silicat'))) minScore += 9;
+    if (mineralKeys.some((k) => k.includes('pirox') || k.includes('augita') || k.includes('basalt') || k.includes('olivin'))) minScore += 6;
+    if (mineralKeys.some((k) => k.includes('ilmenit') || k.includes('carbon'))) minScore += 6;
     if (sample.porosityPercent && sample.porosityPercent > 20) geoScore += 5;
-  } else if (targetPlanet === 'Europa') {
-    if (mineralKeys.some(k => k.includes('gelo') || k.includes('sulfat') || k.includes('enxofre'))) minScore += 10;
-    if (mineralKeys.some(k => k.includes('gesso') || k.includes('mirabilit'))) minScore += 6;
+    if (targetPlanet === 'Mercury') thermScore += 10;
+    if (targetPlanet === 'Phobos' || targetPlanet === 'Deimos') radScore += 6;
+  } else if (targetPlanet === 'Io' || targetPlanet === 'Venus') {
+    if (mineralKeys.some((k) => k.includes('basalt') || k.includes('enxofre') || k.includes('sulf') || k.includes('cloro'))) minScore += 10;
+    if (sample.pH !== undefined && sample.pH < 3.5) chemScore += 10;
+    thermScore += 14;
+    if (targetPlanet === 'Io') radScore += 8;
+  } else if (
+    targetPlanet === 'Europa' ||
+    targetPlanet === 'Ganymede' ||
+    targetPlanet === 'Callisto' ||
+    targetPlanet === 'Mimas' ||
+    targetPlanet === 'Tethys' ||
+    targetPlanet === 'Dione' ||
+    targetPlanet === 'Rhea' ||
+    targetPlanet === 'Iapetus' ||
+    targetPlanet === 'Miranda' ||
+    targetPlanet === 'Ariel' ||
+    targetPlanet === 'Umbriel' ||
+    targetPlanet === 'Titania' ||
+    targetPlanet === 'Oberon' ||
+    targetPlanet === 'Triton' ||
+    targetPlanet === 'Pluto' ||
+    targetPlanet === 'Charon'
+  ) {
+    if (mineralKeys.some((k) => k.includes('gelo') || k.includes('sulfat') || k.includes('enxofre') || k.includes('sal') || k.includes('halit'))) {
+      minScore += 10;
+    }
+    if (mineralKeys.some((k) => k.includes('gesso') || k.includes('mirabilit') || k.includes('carbon') || k.includes('tolin'))) {
+      minScore += 6;
+    }
     thermScore += 12;
     radScore += 8;
-  } else if (targetPlanet === 'Enceladus') {
-    if (mineralKeys.some(k => k.includes('brucit') || k.includes('serpentin') || k.includes('calcit'))) minScore += 10;
-    if (sample.pH !== undefined && sample.pH >= 9.0) chemScore += 12;
+  } else if (targetPlanet === 'Enceladus' || targetPlanet === 'Ceres') {
+    if (mineralKeys.some((k) => k.includes('brucit') || k.includes('serpentin') || k.includes('calcit') || k.includes('carbonat') || k.includes('trona') || k.includes('argil'))) {
+      minScore += 10;
+    }
+    if (sample.pH !== undefined && sample.pH >= 8.5) chemScore += 12;
     geoScore += 6;
-  } else if (targetPlanet === 'Titan') {
-    if (mineralKeys.some(k => k.includes('organ') || k.includes('betume') || k.includes('hidrocarbon'))) minScore += 12;
+  } else if (targetPlanet === 'Titan' || targetPlanet === 'Jupiter' || targetPlanet === 'Saturn' || targetPlanet === 'Uranus' || targetPlanet === 'Neptune') {
+    if (mineralKeys.some((k) => k.includes('organ') || k.includes('betume') || k.includes('hidrocarbon') || k.includes('metan') || k.includes('areia') || k.includes('quartzo'))) {
+      minScore += 10;
+    }
     if (sample.waterActivity !== undefined && sample.waterActivity < 0.25) chemScore += 10;
     geoScore += 8;
-  } else if (targetPlanet === 'Venus') {
-    if (mineralKeys.some(k => k.includes('basalt') || k.includes('enxofre') || k.includes('cloro'))) minScore += 9;
-    if (sample.pH !== undefined && sample.pH < 3.0) chemScore += 10;
-    thermScore += 14;
+  } else if (targetPlanet === 'Earth') {
+    geoScore += 8;
+    chemScore += 6;
   }
 
   // Cap all scores between 40 and 99
@@ -257,7 +289,7 @@ export function parseUserInjectedData(rawText: string, filename: string): Partia
       coordinates: [isNaN(lat) ? -24.089 : lat, isNaN(lng) ? -69.873 : lng],
       depthCm: isNaN(depth) ? 5 : depth,
       rockClassification: row['classification'] || row['classificacao'] || 'Regolito Vulcânico/Evaporito',
-      targetPlanet: (row['target'] && (row['target'].toLowerCase().includes('moon') || row['target'].toLowerCase().includes('lua'))) ? 'Moon' : 'Mars',
+      targetPlanet: resolveCsvTargetPlanet(row['target'] || row['planeta'] || row['astro']),
       waterActivity: isNaN(aw) ? 0.38 : aw,
       pH: isNaN(ph) ? 7.0 : ph,
       porosityPercent: 20.0,
@@ -278,4 +310,13 @@ export function parseUserInjectedData(rawText: string, filename: string): Partia
   }
 
   return results;
+}
+
+function resolveCsvTargetPlanet(raw?: string): PlanetaryTarget {
+  if (!raw) return 'Mars';
+  const normalized = raw.trim().toLowerCase();
+  const matched = CELESTIAL_BODIES.find(
+    (b) => b.id.toLowerCase() === normalized || b.namePt.toLowerCase() === normalized
+  );
+  return matched ? matched.id : 'Mars';
 }
