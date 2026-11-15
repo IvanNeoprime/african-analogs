@@ -161,8 +161,6 @@ export function persistAccountsAndProfiles(
   safeWriteJson(STORAGE_KEYS.ACCOUNTS, accounts);
   safeWriteJson(STORAGE_KEYS.PROFILES, customProfiles);
   safeWriteJson(STORAGE_KEYS.SESSION_USER_ID, sessionUserId);
-  // Accounts and e-mails stay private: only public profile fields are shared.
-  void syncStateToLocalServer({ customProfiles: customProfiles.map(({ email: _email, ...rest }) => rest) });
 }
 
 export function persistWorkspaceCollections(payload: {
@@ -177,37 +175,6 @@ export function persistWorkspaceCollections(payload: {
   safeWriteJson(STORAGE_KEYS.DIRECT_THREADS, payload.directThreads);
   safeWriteJson(STORAGE_KEYS.STUDY_THREADS, payload.studyThreads);
   safeWriteJson(STORAGE_KEYS.NETWORK_GROUPS, payload.networkGroups);
-  // Direct messages and personal connections are private and stay in this browser.
-  void syncStateToLocalServer({
-    samples: payload.samples,
-    studyThreads: payload.studyThreads,
-    networkGroups: payload.networkGroups,
-  });
-}
-
-export async function syncStateToLocalServer(partialState: Record<string, unknown>): Promise<void> {
-  // The server only accepts writes from signed-in users; anonymous work stays in this browser.
-  const token = getSessionToken();
-  if (!token) return;
-  try {
-    await fetch(HARDCODED_API_ENDPOINTS.BACKEND_LOCAL_STATE, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(partialState),
-    });
-  } catch {
-    // LocalStorage remains primary guaranteed persistence even offline
-  }
-}
-
-export async function fetchServerLocalState(): Promise<Partial<LocalWorkspaceState> | null> {
-  try {
-    const res = await fetch(HARDCODED_API_ENDPOINTS.BACKEND_LOCAL_STATE);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
 }
 
 export function normalizeCodename(raw: string): string {

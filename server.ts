@@ -5,6 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
+import { migrateLegacyJson, Store, type UserRow } from './server/database';
 
 dotenv.config();
 
@@ -51,31 +52,12 @@ const HARDCODED_OFFICIAL_APIS = {
     'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=8&minmagnitude=4.5',
 } as const;
 
+// SQLite database (see server/database.ts). Data from the old JSON files is imported once.
 const LOCAL_DB_DIR = path.resolve(__dirname, '.local-data');
-const LOCAL_DB_FILE = path.join(LOCAL_DB_DIR, 'african-analogs-db.json');
-
-function readLocalDb(): Record<string, any> {
-  try {
-    if (fs.existsSync(LOCAL_DB_FILE)) {
-      return JSON.parse(fs.readFileSync(LOCAL_DB_FILE, 'utf-8'));
-    }
-  } catch {
-    // fallback empty store
-  }
-  return {};
-}
-
-function writeLocalDb(patch: Record<string, any>): void {
-  try {
-    if (!fs.existsSync(LOCAL_DB_DIR)) {
-      fs.mkdirSync(LOCAL_DB_DIR, { recursive: true });
-    }
-    const current = readLocalDb();
-    const merged = { ...current, ...patch, updatedAt: new Date().toISOString() };
-    fs.writeFileSync(LOCAL_DB_FILE, JSON.stringify(merged, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Local JSON persistence skipped:', err);
-  }
+const store = new Store(process.env.DATABASE_FILE || path.join(LOCAL_DB_DIR, 'african-analogs.sqlite'));
+{
+  const migrated = migrateLegacyJson(store, LOCAL_DB_DIR);
+  if (migrated.length) console.log(`Dados antigos (JSON) importados para SQLite: ${migrated.join(', ')}.`);
 }
 
 // NVIDIA NIM AI configuration — the key comes from the environment (.env), never from source code.
@@ -542,85 +524,52 @@ app.get('/api/official/nasa-events', async (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Authentication: credentials live only on the server (scrypt), never in the
-// shared state file and never in the browser.
+// Authentication: credentials live only in the database (scrypt), never in the browser.
 // ---------------------------------------------------------------------------
-const AUTH_FILE = path.join(LOCAL_DB_DIR, 'auth.json');
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
-interface StoredCredential {
-  accountId: string;
-  email: string;
-  codename: string;
-  salt: string;
-  hash: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AuthStore {
-  credentials: Record<string, StoredCredential>;
-  sessions: Record<string, { accountId: string; expiresAt: number }>;
-}
-
-function readAuthStore(): AuthStore {
-  try {
-    if (fs.existsSync(AUTH_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
-      return { credentials: parsed.credentials || {}, sessions: parsed.sessions || {} };
-    }
-  } catch (err) {
-    console.warn('Não foi possível ler auth.json:', err);
-  }
-  return { credentials: {}, sessions: {} };
-}
-
-function writeAuthStore(store: AuthStore): void {
-  if (!fs.existsSync(LOCAL_DB_DIR)) fs.mkdirSync(LOCAL_DB_DIR, { recursive: true });
-  const now = Date.now();
-  for (const [token, s] of Object.entries(store.sessions)) {
-    if (s.expiresAt <= now) delete store.sessions[token];
-  }
-  fs.writeFileSync(AUTH_FILE, JSON.stringify(store, null, 2), { encoding: 'utf-8', mode: 0o600 });
-}
 
 function hashPassword(password: string, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
   return { salt, hash };
 }
 
-function verifyPassword(password: string, cred: StoredCredential): boolean {
-  const candidate = Buffer.from(crypto.scryptSync(password, cred.salt, 64).toString('hex'), 'hex');
-  const expected = Buffer.from(cred.hash, 'hex');
+function verifyPassword(password: string, user: UserRow): boolean {
+  const candidate = crypto.scryptSync(password, user.salt, 64);
+  const expected = Buffer.from(user.hash, 'hex');
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 
-/** Old builds stored SHA-256("african-analogs::" + password) in the shared state file. */
-function legacySha256(password: string): string {
-  return crypto.createHash('sha256').update(`african-analogs::${password}`).digest('hex');
-}
-
-function createSession(store: AuthStore, accountId: string): string {
+function newSession(userId: string): string {
   const token = crypto.randomBytes(32).toString('hex');
-  store.sessions[token] = { accountId, expiresAt: Date.now() + SESSION_TTL_MS };
+  store.createSession(token, userId, Date.now() + SESSION_TTL_MS);
   return token;
 }
 
-function sessionAccountId(req: express.Request): string | null {
+function bearerToken(req: express.Request): string {
   const header = req.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (!token) return null;
-  const session = readAuthStore().sessions[token];
-  return session && session.expiresAt > Date.now() ? session.accountId : null;
+  return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 }
 
-const publicAccount = (c: StoredCredential) => ({
-  id: c.accountId,
-  email: c.email,
-  codename: c.codename,
-  profileId: c.accountId,
-  createdAt: c.createdAt,
-  updatedAt: c.updatedAt,
+function sessionUserId(req: express.Request): string | null {
+  const token = bearerToken(req);
+  return token ? store.sessionUser(token) : null;
+}
+
+/** Express middleware: rejects requests without a valid session and exposes res.locals.userId. */
+function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const userId = sessionUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Sessão expirada ou inexistente. Entre na sua conta.' });
+  res.locals.userId = userId;
+  return next();
+}
+
+const publicAccount = (u: UserRow) => ({
+  id: u.id,
+  email: u.email,
+  codename: u.codename,
+  profileId: u.id,
+  createdAt: u.created_at,
+  updatedAt: u.updated_at,
 });
 
 const normalizeEmail = (v: unknown) => String(v ?? '').trim().toLowerCase();
@@ -628,12 +577,14 @@ const normalizeCodenameServer = (v: unknown) => {
   const raw = String(v ?? '').trim().toLowerCase();
   return raw.startsWith('@') ? raw : `@${raw}`;
 };
+const asId = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9._:-]{1,120}$/.test(v) ? v : null);
+const isObject = (v: unknown): v is Record<string, any> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 app.post('/api/auth/register', authRateLimit, (req, res) => {
   const { id, email, codename, password } = req.body || {};
   const cleanEmail = normalizeEmail(email);
   const cleanCodename = normalizeCodenameServer(codename);
-  const accountId = typeof id === 'string' && /^[a-z0-9-]{4,64}$/i.test(id) ? id : `usr-${crypto.randomUUID()}`;
+  const userId = typeof id === 'string' && /^[a-z0-9-]{4,64}$/i.test(id) ? id : `usr-${crypto.randomUUID()}`;
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return res.status(400).json({ error: 'E-mail inválido.' });
@@ -641,26 +592,15 @@ app.post('/api/auth/register', authRateLimit, (req, res) => {
   if (typeof password !== 'string' || password.length < 8) {
     return res.status(400).json({ error: 'A senha deve ter pelo menos 8 caracteres.' });
   }
-
-  const store = readAuthStore();
-  const creds = Object.values(store.credentials);
-  if (creds.some((c) => c.email === cleanEmail)) {
-    return res.status(409).json({ error: 'Já existe uma conta com este e-mail.' });
-  }
-  if (creds.some((c) => c.codename === cleanCodename)) {
-    return res.status(409).json({ error: `O codinome ${cleanCodename} já está em uso.` });
-  }
-  if (store.credentials[accountId]) {
-    return res.status(409).json({ error: 'Identificador de conta já existe.' });
-  }
+  if (store.emailTaken(cleanEmail)) return res.status(409).json({ error: 'Já existe uma conta com este e-mail.' });
+  if (store.codenameTaken(cleanCodename)) return res.status(409).json({ error: `O codinome ${cleanCodename} já está em uso.` });
+  if (store.findUserById(userId)) return res.status(409).json({ error: 'Identificador de conta já existe.' });
 
   const now = new Date().toISOString();
   const { salt, hash } = hashPassword(password);
-  const cred: StoredCredential = { accountId, email: cleanEmail, codename: cleanCodename, salt, hash, createdAt: now, updatedAt: now };
-  store.credentials[accountId] = cred;
-  const token = createSession(store, accountId);
-  writeAuthStore(store);
-  return res.status(201).json({ account: publicAccount(cred), token });
+  const user: UserRow = { id: userId, email: cleanEmail, codename: cleanCodename, salt, hash, created_at: now, updated_at: now };
+  store.insertUser(user);
+  return res.status(201).json({ account: publicAccount(user), token: newSession(userId) });
 });
 
 app.post('/api/auth/login', authRateLimit, (req, res) => {
@@ -669,107 +609,175 @@ app.post('/api/auth/login', authRateLimit, (req, res) => {
     return res.status(400).json({ error: 'Indique e-mail/codinome e senha.' });
   }
   const id = identifier.trim().toLowerCase();
-  const asCodename = normalizeCodenameServer(id);
-  const store = readAuthStore();
-  let cred = Object.values(store.credentials).find((c) => c.email === id || c.codename === asCodename);
-
-  // One-time migration of accounts created by older builds (SHA-256 in the shared state file).
-  if (!cred) {
-    const legacyAccounts: any[] = Array.isArray(readLocalDb().accounts) ? readLocalDb().accounts : [];
-    const legacy = legacyAccounts.find(
-      (a) => String(a.email || '').toLowerCase() === id || String(a.codename || '').toLowerCase() === asCodename
-    );
-    if (legacy?.passwordHash && legacy.passwordHash === legacySha256(password)) {
-      const now = new Date().toISOString();
-      const { salt, hash } = hashPassword(password);
-      cred = {
-        accountId: legacy.id,
-        email: normalizeEmail(legacy.email),
-        codename: normalizeCodenameServer(legacy.codename),
-        salt,
-        hash,
-        createdAt: legacy.createdAt || now,
-        updatedAt: now,
-      };
-      store.credentials[cred.accountId] = cred;
-    }
-  }
-
-  if (!cred || !verifyPassword(password, cred)) {
+  const user = store.findUserByLogin(id) || store.findUserByLogin(normalizeCodenameServer(id));
+  if (!user || !verifyPassword(password, user)) {
     return res.status(401).json({ error: 'E-mail/codinome ou senha incorretos.' });
   }
-  const token = createSession(store, cred.accountId);
-  writeAuthStore(store);
-  return res.json({ account: publicAccount(cred), token });
+  return res.json({ account: publicAccount(user), token: newSession(user.id) });
 });
 
-app.post('/api/auth/password', authRateLimit, (req, res) => {
-  const accountId = sessionAccountId(req);
-  if (!accountId) return res.status(401).json({ error: 'Sessão expirada. Entre novamente.' });
+app.post('/api/auth/password', authRateLimit, requireAuth, (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
-  const store = readAuthStore();
-  const cred = store.credentials[accountId];
-  if (!cred || typeof currentPassword !== 'string' || !verifyPassword(currentPassword, cred)) {
+  const user = store.findUserById(res.locals.userId);
+  if (!user || typeof currentPassword !== 'string' || !verifyPassword(currentPassword, user)) {
     return res.status(401).json({ error: 'Senha atual incorreta.' });
   }
   if (typeof newPassword !== 'string' || newPassword.length < 8) {
     return res.status(400).json({ error: 'A nova senha deve ter pelo menos 8 caracteres.' });
   }
   const { salt, hash } = hashPassword(newPassword);
-  store.credentials[accountId] = { ...cred, salt, hash, updatedAt: new Date().toISOString() };
-  writeAuthStore(store);
+  store.updatePassword(user.id, salt, hash);
   return res.json({ ok: true });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  const header = req.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (token) {
-    const store = readAuthStore();
-    delete store.sessions[token];
-    writeAuthStore(store);
-  }
+  const token = bearerToken(req);
+  if (token) store.deleteSession(token);
   return res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
-// Shared workspace state (profiles, studies, groups). Readable by anyone,
-// writable only with a valid session. Password material is always stripped.
+// Shared research data. Everyone can read; each record can only be changed by its
+// owner, and every write touches one record (no more "last writer wins" on whole lists).
+// Private data (e-mails, direct messages, personal connections) is never stored here.
 // ---------------------------------------------------------------------------
-// Only public, shareable collections are stored here. Private data stays out:
-//  - accounts (e-mails) live in auth.json and are never listed;
-//  - direct messages and personal connections stay in each user's browser;
-//  - e-mail addresses are removed from public profiles.
-const STATE_KEYS = ['customProfiles', 'samples', 'studyThreads', 'networkGroups'] as const;
+const REQUIRED_ENDORSEMENTS = 2;
 
-const stripPrivateProfileFields = (profiles: unknown) =>
-  Array.isArray(profiles) ? profiles.map(({ email: _email, ...rest }: any) => rest) : profiles;
-
-function publicState(db: Record<string, any>) {
-  const out: Record<string, unknown> = { updatedAt: db.updatedAt };
-  for (const key of STATE_KEYS) {
-    if (key in db) out[key] = key === 'customProfiles' ? stripPrivateProfileFields(db[key]) : db[key];
-  }
-  return out;
+/** Mirrors src/services/peerReview.ts so the rule is enforced by the server too. */
+function derivedStatus(sample: Record<string, any>): string {
+  const endorsers = new Set(
+    (sample.peerComments || [])
+      .filter((c: any) => c.statusChange === 'approved' && c.authorId && c.authorId !== sample.collaboratorId)
+      .map((c: any) => c.authorId)
+  );
+  if (endorsers.size >= REQUIRED_ENDORSEMENTS) return 'verified_peer_reviewed';
+  return sample.status === 'draft' ? 'draft' : 'under_review';
 }
 
-app.get('/api/local/state', (_req, res) => {
-  return res.json(publicState(readLocalDb()));
+app.get('/api/data', (_req, res) => {
+  return res.json({
+    customProfiles: store.listProfiles(),
+    samples: store.listSamples().map((s) => ({ ...s, status: derivedStatus(s) })),
+    studyThreads: store.listStudyThreads(),
+    networkGroups: store.listGroups(),
+  });
 });
 
-app.post('/api/local/state', (req, res) => {
-  if (!sessionAccountId(req)) {
-    return res.status(401).json({ error: 'Entre na sua conta para sincronizar com o servidor.' });
+// Own public profile (e-mail is never stored with it).
+app.put('/api/profiles/me', requireAuth, (req, res) => {
+  if (!isObject(req.body)) return res.status(400).json({ error: 'Formato inválido.' });
+  const userId: string = res.locals.userId;
+  const { email: _email, ...profile } = req.body;
+  if (profile.codename) {
+    const codename = normalizeCodenameServer(profile.codename);
+    if (store.codenameTaken(codename, userId)) return res.status(409).json({ error: `O codinome ${codename} já está em uso.` });
+    store.updateCodename(userId, codename);
+    profile.codename = codename;
   }
-  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
-    return res.status(400).json({ error: 'Formato inválido.' });
+  const saved = { ...profile, id: userId, isLocalRegistered: true };
+  store.upsertProfile(userId, userId, saved);
+  return res.json({ profile: saved });
+});
+
+// Create or update one of your own studies.
+app.put('/api/samples/:id', requireAuth, (req, res) => {
+  const id = asId(req.params.id);
+  if (!id || !isObject(req.body)) return res.status(400).json({ error: 'Pedido inválido.' });
+  const userId: string = res.locals.userId;
+  const { exists, ownerId } = store.sampleOwner(id);
+  if (exists && ownerId !== userId) {
+    return res.status(403).json({ error: 'Só o autor pode alterar este estudo.' });
   }
-  const patch: Record<string, unknown> = {};
-  for (const key of STATE_KEYS) {
-    if (key in req.body) patch[key] = key === 'customProfiles' ? stripPrivateProfileFields(req.body[key]) : req.body[key];
-  }
-  writeLocalDb(patch);
+  // Comments and validation status are managed by the server, never by the author.
+  const { peerComments: _comments, status, ...data } = req.body;
+  const record = { ...data, id, collaboratorId: userId, status: status === 'draft' ? 'draft' : 'under_review' };
+  store.upsertSample(id, userId, record);
+  const saved = store.getSample(id)!;
+  return res.json({ sample: { ...saved, status: derivedStatus(saved) } });
+});
+
+app.delete('/api/samples/:id', requireAuth, (req, res) => {
+  const id = asId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Pedido inválido.' });
+  const { exists, ownerId } = store.sampleOwner(id);
+  if (!exists) return res.status(404).json({ error: 'Estudo não encontrado.' });
+  if (ownerId !== res.locals.userId) return res.status(403).json({ error: 'Só o autor pode apagar este estudo.' });
+  store.deleteSample(id);
   return res.json({ ok: true });
+});
+
+// Peer review comment / endorsement, with the rules enforced here.
+app.post('/api/samples/:id/comments', requireAuth, (req, res) => {
+  const id = asId(req.params.id);
+  const { content, endorse, author, role, institution } = req.body || {};
+  if (!id || typeof content !== 'string' || !content.trim()) return res.status(400).json({ error: 'Comentário vazio.' });
+  const userId: string = res.locals.userId;
+  const sample = store.getSample(id);
+  if (!sample) return res.status(404).json({ error: 'Estudo não encontrado ou ainda só local.' });
+
+  const mayEndorse = Boolean(endorse) && sample.collaboratorId !== userId && !store.hasEndorsed(id, userId);
+  const createdAt = new Date().toISOString();
+  const comment = {
+    id: `c-${crypto.randomUUID()}`,
+    sampleId: id,
+    author: String(author || 'Pesquisador').slice(0, 200),
+    authorId: userId,
+    role: String(role || '').slice(0, 200),
+    institution: String(institution || '').slice(0, 200),
+    timestamp: `${createdAt.slice(0, 16).replace('T', ' ')} UTC`,
+    content: content.trim().slice(0, 5000),
+    statusChange: mayEndorse ? 'approved' : undefined,
+  };
+  store.insertComment(comment.id, id, userId, mayEndorse, comment, createdAt);
+  const updated = store.getSample(id)!;
+  return res.status(201).json({ sample: { ...updated, status: derivedStatus(updated) } });
+});
+
+// Message in a study's discussion (the sender comes from the session).
+app.post('/api/samples/:id/messages', requireAuth, (req, res) => {
+  const sampleId = asId(req.params.id);
+  if (!sampleId || !isObject(req.body) || typeof req.body.content !== 'string' || !req.body.content.trim()) {
+    return res.status(400).json({ error: 'Mensagem vazia.' });
+  }
+  const sentAt = new Date().toISOString();
+  const message = {
+    ...req.body,
+    id: asId(req.body.id) || `st-${crypto.randomUUID()}`,
+    sender: 'user',
+    senderId: res.locals.userId,
+    sentAt,
+    content: req.body.content.trim().slice(0, 5000),
+  };
+  store.insertStudyMessage(message.id, sampleId, res.locals.userId, message, sentAt);
+  return res.status(201).json({ message });
+});
+
+app.post('/api/groups', requireAuth, (req, res) => {
+  const { title, objective, targetPlanet, memberIds } = req.body || {};
+  if (typeof title !== 'string' || !title.trim() || typeof objective !== 'string') {
+    return res.status(400).json({ error: 'Indique o nome e o objetivo do grupo.' });
+  }
+  const userId: string = res.locals.userId;
+  const id = asId(req.body.id) || `net-${crypto.randomUUID()}`;
+  if (store.groupExists(id)) return res.status(409).json({ error: 'Este grupo já existe.' });
+  const data = {
+    id,
+    title: title.trim().slice(0, 200),
+    objective: objective.trim().slice(0, 2000),
+    targetPlanet: typeof targetPlanet === 'string' ? targetPlanet : 'Mars',
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+  // The creator joins; other people are added as members they can leave at any time.
+  const members = [userId, ...(Array.isArray(memberIds) ? memberIds.map(asId).filter(Boolean) : [])] as string[];
+  store.insertGroup(id, userId, data, [...new Set(members)]);
+  return res.status(201).json({ group: store.listGroups().find((g) => g.id === id) });
+});
+
+app.post('/api/groups/:id/membership', requireAuth, (req, res) => {
+  const id = asId(req.params.id);
+  if (!id || !store.groupExists(id)) return res.status(404).json({ error: 'Grupo não encontrado.' });
+  const joined = store.toggleMembership(id, res.locals.userId);
+  return res.json({ joined, group: store.listGroups().find((g) => g.id === id) });
 });
 
 // Production vs Development Setup

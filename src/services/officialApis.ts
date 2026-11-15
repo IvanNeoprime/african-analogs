@@ -23,7 +23,7 @@ export const HARDCODED_API_ENDPOINTS = {
   BACKEND_ELEVATION: '/api/official/elevation',
   BACKEND_NASA_EVENTS: '/api/official/nasa-events',
   BACKEND_API_CATALOG: '/api/official/catalog',
-  BACKEND_LOCAL_STATE: '/api/local/state',
+  BACKEND_SHARED_DATA: '/api/data',
 } as const;
 
 export const OFFICIAL_API_CATALOG: OfficialApiEndpoint[] = [
@@ -74,12 +74,12 @@ export const OFFICIAL_API_CATALOG: OfficialApiEndpoint[] = [
   },
   {
     id: 'local-ecosystem',
-    name: 'Repositório Local de Contas, Perfis & Estudos',
-    provider: 'Armazenamento Local Persistente',
+    name: 'Base de Dados Partilhada (SQLite)',
+    provider: 'Servidor African Analogs',
     category: 'Contas & Armazenamento',
-    endpoint: HARDCODED_API_ENDPOINTS.BACKEND_LOCAL_STATE,
+    endpoint: HARDCODED_API_ENDPOINTS.BACKEND_SHARED_DATA,
     authMode: 'Proxy Servidor Integrado',
-    description: 'Sincroniza cadastro de contas, perfis dinâmicos e pesquisas em armazenamento local.',
+    description: 'Estudos, perfis públicos, discussões e grupos, guardados registo a registo com dono.',
   },
 ];
 

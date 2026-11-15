@@ -37,9 +37,23 @@ import {
 import { computeAnalogueFidelity, generateSpectralReflectanceCurve } from './services/spectralEngine';
 import { computeSampleFingerprint } from './services/fingerprint';
 import { endorseBlockReason, reviewStatus } from './services/peerReview';
+import { api, ApiError, mergeById } from './services/api';
+
+/** Merges two message maps (per study), de-duplicating by message id and keeping time order. */
+function mergeThreads(
+  local: Record<string, DirectResearchMessage[]>,
+  remote: Record<string, DirectResearchMessage[]>
+): Record<string, DirectResearchMessage[]> {
+  const out: Record<string, DirectResearchMessage[]> = { ...local };
+  for (const [sampleId, msgs] of Object.entries(remote)) {
+    const byId = new Map((out[sampleId] || []).map((m) => [m.id, m]));
+    for (const m of msgs) byId.set(m.id, m);
+    out[sampleId] = [...byId.values()].sort((a, b) => (a.sentAt || '').localeCompare(b.sentAt || ''));
+  }
+  return out;
+}
 import {
   changePassword,
-  fetchServerLocalState,
   getSessionToken,
   loadLocalWorkspaceState,
   loginAccount,
@@ -199,31 +213,42 @@ export default function App() {
   const [latestAiAnalysis, setLatestAiAnalysis] = useState<LatestAiAnalysisSnapshot | null>(null);
   const [publishTriggerCount, setPublishTriggerCount] = useState(0);
 
-  // Hydrate from server local JSON backup if browser localStorage was empty
+  // --- Shared database (SQLite on the server) ---
+  // Every visitor loads the shared studies, profiles, discussions and groups. Records from the
+  // server win over local copies; demo content and anonymous drafts stay local.
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
   useEffect(() => {
-    if (initialLocal.accounts.length > 0 || (initialLocal.samples && initialLocal.samples.length > 0)) {
-      return;
-    }
-    let mounted = true;
-    fetchServerLocalState().then((remote) => {
-      if (!mounted || !remote) return;
-      if (Array.isArray(remote.accounts) && remote.accounts.length > 0) {
-        setAccounts(remote.accounts);
-      }
-      if (Array.isArray(remote.customProfiles) && remote.customProfiles.length > 0) {
-        setCustomProfiles(remote.customProfiles);
-      }
-      if (Array.isArray(remote.samples) && remote.samples.length > 0) {
-        setSamples(relabelLegacyDemoNames(remote.samples).map((s) => ({ ...s, status: reviewStatus(s) })));
-      }
-      if (Array.isArray(remote.networkGroups) && remote.networkGroups.length > 0) {
-        setNetworkGroups(remote.networkGroups);
-      }
+    if (!syncNotice) return;
+    const t = setTimeout(() => setSyncNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [syncNotice]);
+
+  /** Runs a server write when signed in; failures are shown, local changes are kept. */
+  const syncRemote = (label: string, write: () => Promise<unknown>) => {
+    if (!api.hasSession()) return;
+    write().catch((err: unknown) => {
+      if (err instanceof ApiError && err.status === 404) return; // demo / local-only record
+      setSyncNotice(`${label}: ${(err as Error).message}`);
     });
+  };
+
+  const [sharedDataVersion, setSharedDataVersion] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    api
+      .loadSharedData()
+      .then((remote) => {
+        if (!mounted) return;
+        setCustomProfiles((prev) => mergeById(prev, remote.customProfiles));
+        setSamples((prev) => mergeById(prev, relabelLegacyDemoNames(remote.samples)));
+        setStudyThreads((prev) => mergeThreads(prev, remote.studyThreads));
+        setNetworkGroups((prev) => mergeById(prev, remote.networkGroups));
+      })
+      .catch(() => setSyncNotice('Servidor indisponível: a mostrar só os dados guardados neste navegador.'));
     return () => {
       mounted = false;
     };
-  }, [initialLocal.accounts.length, initialLocal.samples]);
+  }, [sharedDataVersion]);
 
   // Combined Collaborators (Dynamic registered profiles appear right alongside core researchers)
   const allCollaborators = useMemo(() => {
@@ -265,6 +290,7 @@ export default function App() {
     setAccounts((prev) => [account, ...prev.filter((a) => a.id !== account.id)]);
     setCustomProfiles((prev) => [profile, ...prev.filter((p) => p.id !== profile.id)]);
     setSessionUserId(profile.id);
+    syncRemote('Perfil não publicado', () => api.saveProfile(profile));
   };
 
   const handleLoginAccount = async (identifier: string, password: string) => {
@@ -272,6 +298,7 @@ export default function App() {
     // Replace any legacy local copy (which may still hold an old password hash) with the server record.
     setAccounts((prev) => [account, ...prev.filter((a) => a.id !== account.id)]);
     setSessionUserId(account.profileId);
+    setSharedDataVersion((v) => v + 1);
   };
 
   const handleUpdateDynamicProfile = (profileId: string, patch: Partial<CollaboratorProfile>) => {
@@ -295,17 +322,19 @@ export default function App() {
     }
 
     if (patch.name || patch.institution) {
-      setSamples((prev) =>
-        prev.map((s) =>
-          s.collaboratorId === profileId
-            ? {
-                ...s,
-                collectorName: patch.name || s.collectorName,
-                institution: patch.institution || s.institution,
-              }
-            : s
-        )
-      );
+      const renamed = samples
+        .filter((s) => s.collaboratorId === profileId)
+        .map((s) => ({ ...s, collectorName: patch.name || s.collectorName, institution: patch.institution || s.institution }));
+      const byId = new Map(renamed.map((s) => [s.id, s]));
+      setSamples((prev) => prev.map((s) => byId.get(s.id) || s));
+      if (profileId === sessionUserId) {
+        for (const s of renamed) syncRemote('Estudo não atualizado', () => api.saveSample(s));
+      }
+    }
+
+    if (profileId === sessionUserId) {
+      const current = allCollaborators.find((c) => c.id === profileId);
+      if (current) syncRemote('Perfil não guardado no servidor', () => api.saveProfile({ ...current, ...patch }));
     }
   };
 
@@ -332,13 +361,23 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handlePublishStudyFromProfile = (newStudy: GeologicalSample) => {
-    setSamples((prev) => [newStudy, ...prev.filter((s) => s.id !== newStudy.id)]);
-    setActiveSample(newStudy);
+  /** Saves a study locally and, when signed in, in the shared database (server copy wins). */
+  const handleSaveSample = (sample: GeologicalSample) => {
+    setSamples((prev) => [sample, ...prev.filter((s) => s.id !== sample.id)]);
+    setActiveSample(sample);
+    syncRemote('Estudo não publicado no servidor', () =>
+      api.saveSample(sample).then((saved) => {
+        setSamples((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
+        setActiveSample((cur) => (cur.id === saved.id ? saved : cur));
+      })
+    );
   };
+
+  const handlePublishStudyFromProfile = (newStudy: GeologicalSample) => handleSaveSample(newStudy);
 
   const handleDeleteOwnSample = (sampleId: string) => {
     setSamples((prev) => prev.filter((s) => s.id !== sampleId));
+    syncRemote('Estudo não apagado no servidor', () => api.deleteSample(sampleId));
   };
 
   // --- Collaboration & Network Actions ---
@@ -362,10 +401,17 @@ export default function App() {
       ...prev,
       [sampleId]: [...(prev[sampleId] || []), msg],
     }));
+    // Only people's messages are shared; automatic AI replies stay with the person who asked.
+    if (msg.sender === 'user') {
+      syncRemote('Mensagem não enviada ao servidor', () => api.addStudyMessage(sampleId, msg));
+    }
   };
 
   const handleCreateNetworkGroup = (group: ResearchNetworkGroup) => {
     setNetworkGroups((prev) => [group, ...prev]);
+    syncRemote('Grupo não criado no servidor', () =>
+      api.createGroup(group).then((saved) => setNetworkGroups((prev) => prev.map((g) => (g.id === saved.id ? saved : g))))
+    );
   };
 
   const handleJoinNetworkGroup = (groupId: string) => {
@@ -381,6 +427,11 @@ export default function App() {
             : [...g.memberIds, myMemberId],
         };
       })
+    );
+    syncRemote('Participação no grupo não guardada', () =>
+      api
+        .toggleGroupMembership(groupId)
+        .then(({ group }) => setNetworkGroups((prev) => prev.map((g) => (g.id === group.id ? group : g))))
     );
   };
 
@@ -452,6 +503,12 @@ export default function App() {
       };
       return { ...sample, hash: computeSampleFingerprint(sample) };
     });
+    for (const s of normalized) {
+      syncRemote('Estudo importado não publicado', () =>
+        api.saveSample(s).then((saved) => setSamples((prev) => prev.map((x) => (x.id === saved.id ? saved : x))))
+      );
+    }
+
     if (normalized.length > 0) {
       setSamples((prev) => {
         const existingNames = new Set(prev.map((item) => item.name.toLowerCase()));
@@ -487,6 +544,17 @@ export default function App() {
         }
         return s;
       })
+    );
+    syncRemote('Comentário não publicado no servidor', () =>
+      api
+        .addComment(sampleId, {
+          content: commentText,
+          endorse: mayEndorse,
+          author: newComment.author,
+          role: newComment.role,
+          institution: newComment.institution,
+        })
+        .then((saved) => setSamples((prev) => prev.map((s) => (s.id === saved.id ? saved : s))))
     );
   };
 
@@ -544,10 +612,7 @@ export default function App() {
             attachedDiagnostics={attachedDiagnostics}
             latestAiAnalysis={latestAiAnalysis}
             onSelectSite={setSelectedSite}
-            onSaveSample={(updated) => {
-              setActiveSample(updated);
-              setSamples((prev) => [updated, ...prev.filter((s) => s.id !== updated.id)]);
-            }}
+            onSaveSample={handleSaveSample}
             onInjectBulkSamples={handleInjectBulkSamples}
             onVisionComplete={handleVisionComplete}
             onAttachDiagnostics={(text) => setAttachedDiagnostics(text)}
@@ -622,6 +687,15 @@ export default function App() {
         )}
         </Suspense>
       </main>
+
+      {syncNotice && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1300] max-w-[calc(100%-2rem)] px-4 py-2.5 rounded-xl bg-[#0F172A] dark:bg-[#F0F6FC] text-[#F8FAFC] dark:text-[#0F172A] text-sm shadow-lg"
+        >
+          {syncNotice}
+        </div>
+      )}
 
       <footer className="mt-auto py-4 px-3 sm:px-5 lg:px-6 bg-[#FFFFFF] dark:bg-[#161B22] text-xs text-[#475569] dark:text-[#94A3B8] transition-colors duration-150">
         <div className="w-full max-w-[1680px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">

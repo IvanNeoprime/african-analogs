@@ -265,6 +265,9 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       setActiveSampleDetail(smp);
       setWorkspaceView('profiles');
       setHistoryScope('all_past');
+      // Show the study's author in the profile card.
+      const author = collaborators.find((c) => c.id === smp.collaboratorId || c.name === smp.collectorName);
+      if (author) setSelectedCollaboratorId(author.id);
       requestAnimationFrame(() => studyDetailRef.current?.scrollIntoView({ block: 'start' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

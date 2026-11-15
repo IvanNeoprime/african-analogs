@@ -173,7 +173,14 @@ Os perfis de colaboradores, mensagens e amostras que vêm com a aplicação são
 | `/api/official/catalog` | `GET` | Catálogo ativo de endpoints NASA/DEM, modelo de IA e modo de armazenamento |
 | `/api/official/elevation` | `GET` | Consulta altimetria oficial SRTM 90m (`?lat=...&lng=...`) via OpenTopoData |
 | `/api/official/nasa-events` | `GET` | Busca eventos naturais ativos da API oficial NASA EONET v3 |
-| `/api/local/state` | `GET`/`POST` | Estado partilhado em `.local-data/african-analogs-db.json`. `GET` nunca inclui senhas; `POST` exige sessão válida e só aceita chaves conhecidas |
+| `/api/data` | `GET` | Dados partilhados (perfis públicos, estudos com comentários, discussões, grupos). Nunca inclui e-mails, senhas ou mensagens privadas |
+| `/api/profiles/me` | `PUT` | Guarda o perfil público do utilizador com sessão |
+| `/api/samples/:id` | `PUT`/`DELETE` | Cria, altera ou apaga um estudo — só o autor |
+| `/api/samples/:id/comments` | `POST` | Comentário/endosso; o servidor aplica as regras da revisão por pares |
+| `/api/samples/:id/messages` | `POST` | Mensagem na discussão de um estudo |
+| `/api/groups` · `/api/groups/:id/membership` | `POST` | Criar grupo · entrar/sair |
+
+**Base de dados:** SQLite (`node:sqlite`, incluído no Node ≥ 22, sem dependências nativas) em `.local-data/african-analogs.sqlite` (configurável com `DATABASE_FILE`). Cada estudo, comentário, mensagem e grupo é um registo com dono, por isso várias pessoas podem trabalhar ao mesmo tempo sem se sobreporem. Os ficheiros JSON de versões anteriores são importados automaticamente no primeiro arranque e renomeados para `*.migrated`. Faça cópias de segurança deste ficheiro.
 
 As rotas `/api/ai/*` têm limite de 30 pedidos por 10 minutos por IP e respondem `503` se `NVIDIA_API_KEY` não estiver definida.
 
