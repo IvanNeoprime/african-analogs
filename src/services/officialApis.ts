@@ -16,10 +16,10 @@ export const HARDCODED_API_ENDPOINTS = {
     'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=8&minmagnitude=4.5',
 
   // Endpoints internos pré-configurados no servidor Node/Express
-  BACKEND_CHAT: '/api/gemini/chat',
-  BACKEND_VISION: '/api/gemini/vision-analyze',
-  BACKEND_DIAGNOSTICS: '/api/gemini/diagnostics',
-  BACKEND_REPORT: '/api/gemini/generate-report',
+  BACKEND_CHAT: '/api/ai/chat',
+  BACKEND_VISION: '/api/ai/vision-analyze',
+  BACKEND_DIAGNOSTICS: '/api/ai/diagnostics',
+  BACKEND_REPORT: '/api/ai/generate-report',
   BACKEND_ELEVATION: '/api/official/elevation',
   BACKEND_NASA_EVENTS: '/api/official/nasa-events',
   BACKEND_API_CATALOG: '/api/official/catalog',
@@ -269,8 +269,10 @@ export function buildNasaOpenDataSearchUrl(targetPlanet: string): string {
 
 export function downloadNasaCsvTemplate(): void {
   const csvContent = [
-    'name,siteId,collector,institution,lat,lng,depth,aw,ph,target,classification,notes',
-    '"Amostra Exemplo (preencha com seus dados ou do NASA PDS)",danakil,"Seu Nome","Sua Instituicao",14.2417,40.2994,5.0,0.28,3.2,Mars,"Evaporito / Basalto alterado","Substitua esta linha pelos valores observados ou baixados da NASA"',
+    // Leave a cell empty when you did not measure it: empty values are flagged as
+    // "not measured" and excluded from the similarity score (nothing is guessed).
+    'name,siteId,collector,institution,date,lat,lng,depth,aw,ph,porosity,target,classification,minerals,SiO2,Fe2O3,Al2O3,MgO,CaO,source,notes',
+    '"Amostra exemplo — substitua pelos seus dados",danakil,"Seu Nome","Sua Instituição",2026-01-15,14.2417,40.2994,5,0.28,3.2,22,Mars,"Evaporito / basalto alterado","Jarosita: 30; Halita: 25; Gesso: 20; Hematita: 10",42.1,18.3,9.7,3.2,6.4,"Medição de campo / NASA PDS","Exemplo ilustrativo"',
   ].join('\n');
 
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });

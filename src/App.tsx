@@ -1,8 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Navigation, CleanMenuTab } from './components/Navigation';
 import { UnifiedResearchWorkspace } from './components/UnifiedResearchWorkspace';
-import { ResearcherCollaborationFeed } from './components/ResearcherCollaborationFeed';
-import { AccountEcosystemView } from './components/AccountEcosystemView';
+// Secondary tabs are loaded on demand to keep the first page load small.
+const ResearcherCollaborationFeed = lazy(() =>
+  import('./components/ResearcherCollaborationFeed').then((m) => ({ default: m.ResearcherCollaborationFeed }))
+);
+const AccountEcosystemView = lazy(() =>
+  import('./components/AccountEcosystemView').then((m) => ({ default: m.AccountEcosystemView }))
+);
+
+const TabFallback = () => (
+  <div role="status" className="py-16 text-center text-sm text-[#475569] dark:text-[#94A3B8]">
+    A carregar…
+  </div>
+);
 
 import {
   ANALOGUE_SITES,
@@ -10,6 +21,7 @@ import {
   INITIAL_COLLABORATOR_THREADS,
   INITIAL_NETWORK_GROUPS,
   INITIAL_SAMPLES,
+  LEGACY_NAME_REPLACEMENTS,
 } from './data/planetaryData';
 import {
   AnalogueSite,
@@ -23,21 +35,83 @@ import {
   ResearchNetworkGroup,
 } from './types';
 import { computeAnalogueFidelity, generateSpectralReflectanceCurve } from './services/spectralEngine';
+import { computeSampleFingerprint } from './services/fingerprint';
+import { endorseBlockReason, reviewStatus } from './services/peerReview';
 import {
-  authenticateLocalAccount,
-  createLocalAccountRecord,
+  changePassword,
   fetchServerLocalState,
-  hashPasswordSha256,
+  getSessionToken,
   loadLocalWorkspaceState,
+  loginAccount,
+  logoutAccount,
   persistAccountsAndProfiles,
   persistWorkspaceCollections,
+  registerAccount,
   RegisterAccountInput,
 } from './services/localAccountStore';
 
-export default function App() {
-  const initialLocal = useMemo(() => loadLocalWorkspaceState(), []);
+/**
+ * Data saved by older builds may still carry real researchers' names that were used in the
+ * demo content. Relabel them with the fictional demo names before anything is shown.
+ */
+function relabelLegacyDemoNames<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  let json = JSON.stringify(value);
+  for (const [from, to] of Object.entries(LEGACY_NAME_REPLACEMENTS)) {
+    json = json.split(JSON.stringify(from).slice(1, -1)).join(JSON.stringify(to).slice(1, -1));
+  }
+  return JSON.parse(json) as T;
+}
 
-  const [activeTab, setActiveTab] = useState<CleanMenuTab>('research_workspace');
+// ---------------------------------------------------------------------------
+// Shareable page addresses (hash routes), so links can be sent and Back works:
+//   #/pesquisa · #/comunidade · #/comunidade/pessoa/<id> · #/comunidade/estudo/<id> · #/conta
+// ---------------------------------------------------------------------------
+interface Route {
+  tab: CleanMenuTab;
+  personId?: string;
+  studyId?: string;
+}
+
+function parseRoute(hash: string): Route {
+  const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+  switch (parts[0]) {
+    case 'comunidade':
+      if (parts[1] === 'pessoa' && parts[2]) return { tab: 'peer_network', personId: parts[2] };
+      if (parts[1] === 'estudo' && parts[2]) return { tab: 'peer_network', studyId: parts[2] };
+      return { tab: 'peer_network' };
+    case 'conta':
+      return { tab: 'account_profile' };
+    default:
+      return { tab: 'research_workspace' };
+  }
+}
+
+function routeToHash(route: Route): string {
+  if (route.tab === 'account_profile') return '#/conta';
+  if (route.tab === 'peer_network') {
+    if (route.studyId) return `#/comunidade/estudo/${encodeURIComponent(route.studyId)}`;
+    if (route.personId) return `#/comunidade/pessoa/${encodeURIComponent(route.personId)}`;
+    return '#/comunidade';
+  }
+  return '#/pesquisa';
+}
+
+export default function App() {
+  const initialRoute = useMemo(() => parseRoute(window.location.hash), []);
+  const initialLocal = useMemo(() => {
+    const state = loadLocalWorkspaceState();
+    return {
+      ...state,
+      // Re-derive review status: older builds marked a study "validated" after a single endorsement.
+      samples: relabelLegacyDemoNames(state.samples)?.map((s) => ({ ...s, status: reviewStatus(s) })) ?? null,
+      directThreads: relabelLegacyDemoNames(state.directThreads),
+      studyThreads: relabelLegacyDemoNames(state.studyThreads),
+    };
+  }, []);
+
+  const [activeTab, setActiveTab] = useState<CleanMenuTab>(initialRoute.tab);
+  const [focusedStudyId, setFocusedStudyId] = useState<string | null>(initialRoute.studyId || null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       return localStorage.getItem('african-analogs-theme') === 'dark' ? 'dark' : 'light';
@@ -68,7 +142,34 @@ export default function App() {
   const [accounts, setAccounts] = useState<LocalUserAccount[]>(initialLocal.accounts);
   const [customProfiles, setCustomProfiles] = useState<CollaboratorProfile[]>(initialLocal.customProfiles);
   const [sessionUserId, setSessionUserId] = useState<string | null>(initialLocal.sessionUserId);
-  const [focusedCollaboratorId, setFocusedCollaboratorId] = useState<string | null>(null);
+  const [focusedCollaboratorId, setFocusedCollaboratorId] = useState<string | null>(initialRoute.personId || null);
+
+  // Keep the address bar in sync with what is on screen (each change is a history entry).
+  const currentHash = routeToHash({
+    tab: activeTab,
+    personId: focusedCollaboratorId || undefined,
+    studyId: focusedStudyId || undefined,
+  });
+  useEffect(() => {
+    if (window.location.hash === currentHash) return;
+    if (!window.location.hash) {
+      window.history.replaceState(null, '', currentHash);
+    } else {
+      window.location.hash = currentHash;
+    }
+  }, [currentHash]);
+
+  // Back/Forward and links pasted into the address bar.
+  useEffect(() => {
+    const onHashChange = () => {
+      const route = parseRoute(window.location.hash);
+      setActiveTab(route.tab);
+      setFocusedCollaboratorId(route.personId || null);
+      setFocusedStudyId(route.studyId || null);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   const [sites] = useState<AnalogueSite[]>(ANALOGUE_SITES);
   const [baseCollaborators] = useState<CollaboratorProfile[]>(COLLABORATORS);
@@ -113,7 +214,7 @@ export default function App() {
         setCustomProfiles(remote.customProfiles);
       }
       if (Array.isArray(remote.samples) && remote.samples.length > 0) {
-        setSamples(remote.samples);
+        setSamples(relabelLegacyDemoNames(remote.samples).map((s) => ({ ...s, status: reviewStatus(s) })));
       }
       if (Array.isArray(remote.networkGroups) && remote.networkGroups.length > 0) {
         setNetworkGroups(remote.networkGroups);
@@ -160,15 +261,17 @@ export default function App() {
 
   // --- Account & Dynamic Profile Actions ---
   const handleRegisterAccount = async (input: RegisterAccountInput) => {
-    const { account, profile } = await createLocalAccountRecord(input, accounts, allCollaborators);
-    setAccounts((prev) => [account, ...prev]);
-    setCustomProfiles((prev) => [profile, ...prev]);
+    const { account, profile } = await registerAccount(input, allCollaborators);
+    setAccounts((prev) => [account, ...prev.filter((a) => a.id !== account.id)]);
+    setCustomProfiles((prev) => [profile, ...prev.filter((p) => p.id !== profile.id)]);
     setSessionUserId(profile.id);
   };
 
   const handleLoginAccount = async (identifier: string, password: string) => {
-    const matched = await authenticateLocalAccount(identifier, password, accounts);
-    setSessionUserId(matched.profileId);
+    const { account } = await loginAccount(identifier, password, accounts);
+    // Replace any legacy local copy (which may still hold an old password hash) with the server record.
+    setAccounts((prev) => [account, ...prev.filter((a) => a.id !== account.id)]);
+    setSessionUserId(account.profileId);
   };
 
   const handleUpdateDynamicProfile = (profileId: string, patch: Partial<CollaboratorProfile>) => {
@@ -211,26 +314,23 @@ export default function App() {
     currentPassword: string,
     newPassword: string
   ) => {
-    const acc = accounts.find((a) => a.id === accountId);
-    if (!acc) throw new Error('Conta não encontrada.');
-    const curHash = await hashPasswordSha256(currentPassword);
-    if (curHash !== acc.passwordHash) {
-      throw new Error('Senha atual incorreta.');
-    }
-    if (newPassword.length < 6) {
-      throw new Error('A nova senha deve ter no mínimo 6 caracteres.');
-    }
-    const newHash = await hashPasswordSha256(newPassword);
+    if (!accounts.some((a) => a.id === accountId)) throw new Error('Conta não encontrada.');
+    await changePassword(currentPassword, newPassword);
     setAccounts((prev) =>
-      prev.map((a) =>
-        a.id === accountId ? { ...a, passwordHash: newHash, updatedAt: new Date().toISOString() } : a
-      )
+      prev.map((a) => (a.id === accountId ? { ...a, updatedAt: new Date().toISOString() } : a))
     );
   };
 
   const handleLogout = () => {
+    void logoutAccount();
     setSessionUserId(null);
   };
+
+  // A stored session id without a server token (e.g. from an older build) is not a real session.
+  useEffect(() => {
+    if (sessionUserId && !getSessionToken()) setSessionUserId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePublishStudyFromProfile = (newStudy: GeologicalSample) => {
     setSamples((prev) => [newStudy, ...prev.filter((s) => s.id !== newStudy.id)]);
@@ -290,48 +390,68 @@ export default function App() {
 
   const handleInjectBulkSamples = (partials: Partial<GeologicalSample>[]) => {
     const normalized: GeologicalSample[] = partials.map((p, index) => {
-      const target: PlanetaryTarget = p.targetPlanet || 'Mars';
-      const minerals = p.minerals || { 'Silicatos Basálticos': 60, 'Óxidos de Ferro': 25, 'Sulfatos': 15 };
-      const fidelityScores = computeAnalogueFidelity(
-        {
-          targetPlanet: target,
-          waterActivity: p.waterActivity ?? 0.35,
-          pH: p.pH ?? 7.0,
-          depthCm: p.depthCm ?? 5.0,
-          porosityPercent: p.porosityPercent ?? 18.0,
-          minerals,
-        },
-        target
-      );
+      const target: PlanetaryTarget = p.targetPlanet || selectedSite.targetPlanet || 'Mars';
+      const refSite = sites.find((s) => s.id === p.siteId) || selectedSite;
+      const unmeasured = new Set(p.unmeasured || []);
+      const placeholders: string[] = [];
 
-      return {
-        id: p.id || `smp-imp-${Date.now()}-${index}`,
-        name: p.name || `Amostra Oficial #${index + 1}`,
-        siteId: p.siteId || selectedSite.id,
-        collaboratorId: p.collaboratorId || currentUser?.id,
-        collectorName: p.collectorName || currentUser?.name || 'Equipe Colaborativa',
-        institution: p.institution || currentUser?.institution || 'Rede African Analogs',
-        collectedAt: p.collectedAt || new Date().toISOString().split('T')[0],
-        coordinates: p.coordinates || selectedSite.coordinates,
-        depthCm: p.depthCm ?? 5.0,
-        rockClassification: p.rockClassification || 'Regolito / Evaporito Análogo',
+      // Values the file did not contain get neutral placeholders that are flagged as
+      // unmeasured: the AFI ignores them and the notes say so explicitly.
+      const coordinates = p.coordinates || refSite.coordinates;
+      if (!p.coordinates) {
+        unmeasured.add('coordinates');
+        placeholders.push(`coordenadas do sítio de referência (${refSite.name})`);
+      }
+      const waterActivity = p.waterActivity ?? refSite.waterActivityAw;
+      if (p.waterActivity === undefined) {
+        unmeasured.add('waterActivity');
+        placeholders.push(`aw típica do sítio (${refSite.waterActivityAw})`);
+      }
+      const pH = p.pH ?? 7;
+      if (p.pH === undefined) {
+        unmeasured.add('pH');
+        placeholders.push('pH 7 (neutro, não medido)');
+      }
+      const minerals = p.minerals || {};
+      if (Object.keys(minerals).length === 0) unmeasured.add('minerals');
+
+      const base = {
         targetPlanet: target,
-        waterActivity: p.waterActivity ?? 0.35,
-        pH: p.pH ?? 7.0,
-        porosityPercent: p.porosityPercent ?? 18.0,
+        waterActivity,
+        pH,
+        depthCm: p.depthCm ?? 0,
+        porosityPercent: p.porosityPercent ?? 0,
         minerals,
-        xrfComposition: p.xrfComposition || { SiO2: 50.0, Fe2O3: 16.0, Al2O3: 14.0 },
-        fidelityScores,
+        unmeasured: [...unmeasured],
+      };
+      const notesSuffix = placeholders.length
+        ? `\n[Não medido no ficheiro — valores provisórios: ${placeholders.join('; ')}.]`
+        : '';
+
+      const sample: GeologicalSample = {
+        ...base,
+        id: p.id || `smp-imp-${Date.now()}-${index}`,
+        name: p.name || `Amostra importada #${index + 1}`,
+        siteId: p.siteId && sites.some((s) => s.id === p.siteId) ? p.siteId : refSite.id,
+        collaboratorId: p.collaboratorId || currentUser?.id,
+        collectorName: p.collectorName || currentUser?.name || 'Não indicado',
+        institution: p.institution || currentUser?.institution || 'Não indicada',
+        collectedAt: p.collectedAt || new Date().toISOString().split('T')[0],
+        coordinates,
+        rockClassification: p.rockClassification || 'Não classificada',
+        xrfComposition: p.xrfComposition || {},
+        fidelityScores: computeAnalogueFidelity(base, target, refSite),
         spectralCurve: generateSpectralReflectanceCurve(minerals),
-        fieldNotes: p.fieldNotes || 'Importado via arquivo oficial CSV/JSON.',
-        version: p.version || 'v1.0.0-pds',
-        hash: p.hash || '0x' + Math.random().toString(16).substring(2, 16),
-        status: 'under_review',
-        officialSource: p.officialSource || 'Importação Científica Verificada (CSV/JSON)',
+        fieldNotes: (p.fieldNotes || 'Importado de ficheiro CSV/JSON.') + notesSuffix,
+        version: p.version || 'v1.0.0-import',
+        publishedAt: new Date().toISOString(),
+        hash: '',
+        status: 'draft',
+        officialSource: p.officialSource || 'Ficheiro importado pelo utilizador',
         peerComments: [],
       };
+      return { ...sample, hash: computeSampleFingerprint(sample) };
     });
-
     if (normalized.length > 0) {
       setSamples((prev) => {
         const existingNames = new Set(prev.map((item) => item.name.toLowerCase()));
@@ -343,26 +463,27 @@ export default function App() {
   };
 
   const handleAddPeerComment = (sampleId: string, commentText: string, endorse?: boolean) => {
+    // Only signed-in researchers can comment; endorsement rules live in services/peerReview.
+    if (!currentUser) return;
+    const target = samples.find((s) => s.id === sampleId);
+    const mayEndorse = Boolean(endorse && target && endorseBlockReason(target, currentUser.id) === null);
     const newComment: PeerComment = {
       id: `c-${Date.now()}`,
       sampleId,
       author: currentUser ? `${currentUser.name} (${currentUser.codename})` : 'Pesquisador Colaborador',
+      authorId: currentUser?.id,
       role: currentUser?.role || 'Investigador Planetário',
       institution: currentUser?.institution || 'African Analogs Collaborative',
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16) + ' UTC',
       content: commentText,
-      statusChange: endorse ? 'approved' : undefined,
+      statusChange: mayEndorse ? 'approved' : undefined,
     };
 
     setSamples((prev) =>
       prev.map((s) => {
         if (s.id === sampleId) {
-          const updatedComments = [...(s.peerComments || []), newComment];
-          return {
-            ...s,
-            status: endorse ? ('verified_peer_reviewed' as const) : s.status,
-            peerComments: updatedComments,
-          };
+          const updated = { ...s, peerComments: [...(s.peerComments || []), newComment] };
+          return { ...updated, status: reviewStatus(updated) };
         }
         return s;
       })
@@ -412,6 +533,7 @@ export default function App() {
       />
 
       <main id="main-content" tabIndex={-1} className="flex-1 w-full max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 py-5 sm:py-6 focus:outline-none">
+        <Suspense fallback={<TabFallback />}>
         {activeTab === 'research_workspace' && (
           <UnifiedResearchWorkspace
             sites={sites}
@@ -442,6 +564,15 @@ export default function App() {
             activeSample={activeSample}
             currentUser={currentUser}
             focusedCollaboratorId={focusedCollaboratorId}
+            focusedStudyId={focusedStudyId}
+            onFocusCollaborator={(id) => {
+              setFocusedStudyId(null);
+              setFocusedCollaboratorId(id);
+            }}
+            onFocusStudy={(id) => {
+              setFocusedCollaboratorId(null);
+              setFocusedStudyId(id);
+            }}
             connectedIds={connectedIds}
             directThreads={directThreads}
             studyThreads={studyThreads}
@@ -472,6 +603,8 @@ export default function App() {
             publishTriggerCount={publishTriggerCount}
             connectedIds={connectedIds}
             activeNetworkCount={networkGroups.length}
+            studyThreads={studyThreads}
+            networkGroups={networkGroups}
             onRegister={handleRegisterAccount}
             onLogin={handleLoginAccount}
             onUpdateProfile={handleUpdateDynamicProfile}
@@ -481,11 +614,13 @@ export default function App() {
             onDeleteOwnSample={handleDeleteOwnSample}
             onOpenSampleInResearch={handleCompareWithActive}
             onOpenMyProfileInNetwork={(pid) => {
+              setFocusedStudyId(null);
               setFocusedCollaboratorId(pid);
               setActiveTab('peer_network');
             }}
           />
         )}
+        </Suspense>
       </main>
 
       <footer className="mt-auto py-4 px-3 sm:px-5 lg:px-6 bg-[#FFFFFF] dark:bg-[#161B22] text-xs text-[#475569] dark:text-[#94A3B8] transition-colors duration-150">

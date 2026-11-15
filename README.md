@@ -119,7 +119,7 @@ Para pesquisadores que ainda não têm arquivos CSV, medições ou imagens próp
 - Aba **Pesquisas Anteriores** com filtro por escopo (*Minhas*, *Todas*), filtro por planeta/satélite, busca textual, revisão por pares, comentários, endosso e carregamento direto no painel comparativo.
 
 ### E. Contas, Perfis & Publicação de Artigos (`AccountEcosystemView`)
-- Cadastro rápido em fluxo moderno, autenticação com senha protegida via SHA-256 local e recuperação/alteração de senha.
+- Cadastro e login validados **no servidor**: senhas com scrypt + sal (`.local-data/auth.json`), sessões por token, mínimo de 8 caracteres e limite de tentativas. Nenhum hash de senha é guardado no navegador nem devolvido pela API. Contas criadas por versões antigas são migradas no primeiro login.
 - Perfil simples e editável (nome, apelido `@codename`, foto, instituição, interesses em planetas/luas e bio).
 - Editor manual para **Publicar Novo Artigo**, pré-preenchido opcionalmente com os dados manuais ou anotações do copiloto, mantendo total controle editorial do autor.
 
@@ -155,34 +155,45 @@ Todos os seletores, filtros, cálculos de fidelidade e consultas da IA listam o 
   - *Geopark de Lanzarote — Tubo de Lava de La Corona* (Espanha · Lua)
   - *Borup Fiord Pass — Ilha Ellesmere* (Canadá / Ártico · Europa)
 
+Cada sítio tem pelo menos uma **referência revista por pares com DOI** (verificados na Crossref), visível no cartão do sítio e no mapa. A "semelhança" de cada sítio do catálogo é uma **estimativa editorial**; a da amostra do utilizador é calculada (ver secção 9).
+
+Os perfis de colaboradores, mensagens e amostras que vêm com a aplicação são **fictícios e marcados "Demo"** — não representam pessoas reais.
+
 ---
 
 ## 7. APIs do Servidor (`server.ts`)
 
 | Rota | Método | Descrição |
 | :--- | :--- | :--- |
-| `/api/gemini/chat` · `/api/ai/chat` | `POST` | Chat copiloto com contexto de amostra, planilha CSV/JSON e coordenadas opcionais via NVIDIA Nemotron |
-| `/api/gemini/vision-analyze` · `/api/ai/vision-analyze` | `POST` | Análise visual por telemetria RGB/albedo/contraste + metadados raster GeoTIFF |
-| `/api/gemini/diagnostics` · `/api/ai/diagnostics` | `POST` | Diagnósticos especializados para qualquer planeta, planeta anão ou satélite natural |
-| `/api/gemini/generate-report` · `/api/ai/generate-report` | `POST` | Síntese estruturada de pesquisa pronta para revisão e publicação manual |
+| `/api/ai/chat` | `POST` | Chat copiloto com contexto de amostra, planilha CSV/JSON e coordenadas opcionais via NVIDIA Nemotron |
+| `/api/ai/vision-analyze` | `POST` | Análise visual por telemetria RGB/albedo/contraste + metadados raster (o modelo não recebe a imagem) |
+| `/api/ai/diagnostics` | `POST` | Diagnósticos especializados para qualquer planeta, planeta anão ou satélite natural |
+| `/api/ai/generate-report` | `POST` | Síntese estruturada de pesquisa pronta para revisão e publicação manual |
+| `/api/auth/register` · `/login` · `/password` · `/logout` | `POST` | Contas no servidor (scrypt, tokens de sessão, limite de tentativas) |
 | `/api/official/catalog` | `GET` | Catálogo ativo de endpoints NASA/DEM, modelo de IA e modo de armazenamento |
 | `/api/official/elevation` | `GET` | Consulta altimetria oficial SRTM 90m (`?lat=...&lng=...`) via OpenTopoData |
 | `/api/official/nasa-events` | `GET` | Busca eventos naturais ativos da API oficial NASA EONET v3 |
-| `/api/local/state` | `GET`/`POST` | Leitura e persistência local em `.local-data/african-analogs-db.json` |
+| `/api/local/state` | `GET`/`POST` | Estado partilhado em `.local-data/african-analogs-db.json`. `GET` nunca inclui senhas; `POST` exige sessão válida e só aceita chaves conhecidas |
+
+As rotas `/api/ai/*` têm limite de 30 pedidos por 10 minutos por IP e respondem `503` se `NVIDIA_API_KEY` não estiver definida.
 
 ---
 
 ## 8. Como Executar Localmente
 
 ```bash
+# 0. Configurar a chave da IA (o ficheiro .env não vai para o git)
+cp .env.example .env   # e preencha NVIDIA_API_KEY
+
 # 1. Instalar dependências
 npm install
 
 # 2. Iniciar servidor full-stack de desenvolvimento (Express + Vite na porta 3000)
 npm run dev
 
-# 3. Verificar tipos TypeScript
+# 3. Verificar tipos TypeScript e correr os testes
 npm run lint
+npm test
 
 # 4. Gerar build de produção (frontend dist/ + servidor server.js)
 npm run build
@@ -192,3 +203,26 @@ npm start
 ```
 
 Após iniciar com `npm run dev` ou `npm start`, acesse **`http://localhost:3000`**.
+
+
+---
+
+## 9. Como a Semelhança (AFI) é Calculada
+
+Implementado em `src/services/analogueFidelity.ts` e testado em `src/services/scientific.test.ts`.
+
+- **Mineralogia (60%)** — parte da massa mineral informada que pertence às classes indicadoras do corpo-alvo (ex.: Marte → sulfatos, óxidos de ferro, argilas, cloretos/percloratos, máficos, carbonatos, sílica) e quantas classes diferentes estão presentes.
+- **Geoquímica (40%)** — distância da atividade de água (aw) e do pH à faixa de referência do corpo-alvo (100 dentro da faixa, a descer linearmente fora dela).
+- **Terreno, radiação e clima** descrevem o *sítio*, não a amostra: são copiados do sítio de referência para o gráfico radar e **não entram na nota**.
+- Dados em falta ou provisórios (marcados `unmeasured`, por exemplo numa importação CSV incompleta) **não contam**: uma amostra vazia tem 0%, e a interface mostra a cobertura dos dados.
+- Gigantes gasosos não têm superfície sólida, por isso não têm análogo mineral (0%).
+
+As faixas de referência são resumos amplos da literatura, úteis para triagem — não substituem uma comparação publicada.
+
+### Importação CSV/JSON
+
+O modelo de planilha (botão "Modelo CSV") inclui as colunas `minerals` (`"Jarosita: 30; Halita: 25"`) e óxidos XRF (`SiO2`, `Fe2O3`, …). Aceita vírgula ou ponto e vírgula como separador, campos entre aspas e decimais com vírgula. Células vazias ficam marcadas como **não medidas** — nada é inventado.
+
+### Impressão digital das amostras
+
+Cada amostra guarda `hash: "sha256:…"`, calculado sobre os dados científicos (medições, local, autor). Qualquer alteração aos dados produz um valor diferente.

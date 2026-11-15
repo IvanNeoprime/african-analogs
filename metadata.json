@@ -1,6 +1,5 @@
 {
   "name": "African Analogs: Planetary Research Platform",
-  "description": "Plataforma científica colaborativa para descoberta de lugares análogos planetários na África e no mundo com dados oficiais, visão computacional e topografia DEM da NASA.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "description": "Plataforma científica colaborativa para comparar lugares análogos planetários na África e no mundo, com mapas NASA/SRTM, referências científicas e um copiloto de IA.",
+  "requestFramePermissions": []
 }

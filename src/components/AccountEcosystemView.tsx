@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AnalogueSite,
   CollaboratorProfile,
+  DirectResearchMessage,
   GeologicalSample,
   LatestAiAnalysisSnapshot,
   LocalUserAccount,
   PlanetaryTarget,
+  ResearchNetworkGroup,
 } from '../types';
 import {
   CELESTIAL_BODIES,
@@ -19,6 +21,9 @@ import {
   RegisterAccountInput,
 } from '../services/localAccountStore';
 import { computeAnalogueFidelity, generateSpectralReflectanceCurve } from '../services/spectralEngine';
+import { computeSampleFingerprint } from '../services/fingerprint';
+import { collectContributions } from '../services/contributions';
+import { ContributionGraph } from './ContributionGraph';
 import {
   UserPlus,
   LogIn,
@@ -51,6 +56,8 @@ interface AccountEcosystemViewProps {
   activeSample: GeologicalSample;
   connectedIds: string[];
   activeNetworkCount: number;
+  studyThreads: Record<string, DirectResearchMessage[]>;
+  networkGroups: ResearchNetworkGroup[];
   latestAiAnalysis?: LatestAiAnalysisSnapshot | null;
   publishTriggerCount?: number;
   onRegister: (input: RegisterAccountInput) => Promise<void>;
@@ -106,6 +113,8 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
   activeSample,
   connectedIds,
   activeNetworkCount,
+  studyThreads,
+  networkGroups,
   latestAiAnalysis,
   publishTriggerCount = 0,
   onRegister,
@@ -335,8 +344,8 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
       setAuthError('Preencha seu nome, e-mail e senha para continuar.');
       return;
     }
-    if (regPassword.length < 6) {
-      setAuthError('A senha precisa ter pelo menos 6 caracteres.');
+    if (regPassword.length < 8) {
+      setAuthError('A senha precisa ter pelo menos 8 caracteres.');
       return;
     }
     if (regPassword !== regConfirmPassword) {
@@ -427,7 +436,13 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
           porosityPercent,
           minerals: mineralsMap,
         },
-        studyPlanet
+        studyPlanet,
+        sites.find(
+          (s) =>
+            studyCustomLocation.trim() &&
+            (s.name.toLowerCase() === studyCustomLocation.trim().toLowerCase() ||
+              studyCustomLocation.toLowerCase().includes(s.name.toLowerCase()))
+        ) || null
       )
     );
   };
@@ -501,6 +516,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
     const publishedStudy: GeologicalSample = {
       ...(existingSample || {}),
       id: existingSample ? existingSample.id : `smp-usr-${Date.now().toString(36)}`,
+      publishedAt: existingSample?.publishedAt || new Date().toISOString(),
       name: studyTitle.trim(),
       siteId: matchedSite.id,
       customLocation: typedLocation,
@@ -551,12 +567,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
             },
           ],
       version: existingSample ? '1.1' : '1.0',
-      hash: existingSample?.hash || 'local-' + Math.random().toString(16).slice(2, 10),
+      hash: '',
       status: existingSample?.status || 'under_review',
       officialSource: existingSample?.officialSource || 'Registro Manual do Pesquisador',
       peerComments: existingSample?.peerComments || [],
     };
 
+    // Fingerprint of the published content: editing the study yields a new value.
+    publishedStudy.hash = computeSampleFingerprint(publishedStudy);
     onPublishStudy(publishedStudy);
     setEditingSampleId(null);
     setStudyTitle('');
@@ -786,7 +804,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                         <input
                           id="reg-pwd"
                           required
-                          minLength={6}
+                          minLength={8}
                           type={showRegPassword ? 'text' : 'password'}
                           value={regPassword}
                           onChange={(e) => setRegPassword(e.target.value)}
@@ -811,7 +829,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                       <input
                         id="reg-pwd-confirm"
                         required
-                        minLength={6}
+                        minLength={8}
                         type={showRegPassword ? 'text' : 'password'}
                         value={regConfirmPassword}
                         onChange={(e) => setRegConfirmPassword(e.target.value)}
@@ -1281,6 +1299,17 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
           <Check className="w-4 h-4 shrink-0" strokeWidth={1.75} />
           <span>{studyNotice}</span>
         </div>
+      )}
+
+      {/* GitHub-style contribution calendar for the signed-in researcher */}
+      {currentUser && profileSection === 'studies' && (
+        <section className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs">
+          <ContributionGraph
+            events={collectContributions(currentUser, { samples, studyThreads, networkGroups })}
+            ownerLabel="você"
+            heading="As suas contribuições"
+          />
+        </section>
       )}
 
       {/* SECTION 1: MY RESEARCHES LIST */}
@@ -1967,10 +1996,10 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   value={newPwd}
                   onChange={(e) => setNewPwd(e.target.value)}
-                  placeholder="Nova senha (mín. 6 caracteres)"
+                  placeholder="Nova senha (mín. 8 caracteres)"
                   aria-label="Nova senha"
                   className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3 py-2 rounded-lg"
                 />

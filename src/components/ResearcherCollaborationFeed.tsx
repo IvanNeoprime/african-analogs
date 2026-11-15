@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { ContributionGraph } from './ContributionGraph';
+import { collectContributions } from '../services/contributions';
 import {
   AnalogueSite,
   CollaboratorProfile,
@@ -10,9 +12,11 @@ import {
 } from '../types';
 import {
   DWARF_PLANET_BODIES,
+  getCelestialBodyLabel,
   PLANET_BODIES,
   SATELLITE_BODIES,
 } from '../data/celestialBodies';
+import { endorseBlockReason, REQUIRED_ENDORSEMENTS, validEndorserIds } from '../services/peerReview';
 import {
   Search,
   MessageSquare,
@@ -35,6 +39,8 @@ import {
   Printer,
   Sparkles,
   Users,
+  Link2,
+  ExternalLink,
 } from 'lucide-react';
 
 import { HARDCODED_API_ENDPOINTS } from '../services/officialApis';
@@ -58,7 +64,33 @@ interface ResearcherCollaborationFeedProps {
   onSelectSample: (sample: GeologicalSample) => void;
   onAddPeerComment: (sampleId: string, comment: string, endorse?: boolean) => void;
   onCompareWithActive: (peerSample: GeologicalSample) => void;
+  /** Study to open (from the page address, e.g. #/comunidade/estudo/<id>). */
+  focusedStudyId?: string | null;
+  /** Report navigation so the page address can be updated and shared. */
+  onFocusCollaborator?: (collaboratorId: string | null) => void;
+  onFocusStudy?: (sampleId: string) => void;
 }
+
+/** "2026-04-02" → "2 abr 2026" */
+const formatDay = (value: string | undefined) => {
+  const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return value || '';
+  return new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00`).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric' }).replace('.', '');
+};
+
+/** Text colour for a similarity value: low values must not look "good". */
+const similarityTone = (value: number) =>
+  value >= 70
+    ? 'text-[#15803D] dark:text-[#4ADE80]'
+    : value >= 40
+    ? 'text-[#B45309] dark:text-[#FBBF24]'
+    : 'text-[#B91C1C] dark:text-[#F87171]';
+
+export const studyLink = (sampleId: string) =>
+  `${window.location.origin}${window.location.pathname}#/comunidade/estudo/${encodeURIComponent(sampleId)}`;
+
+const formatMessageTime = (d: Date) =>
+  d.toLocaleString('pt-PT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 const AvatarWithFallback: React.FC<{
   src: string;
@@ -114,6 +146,9 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
   onSelectSample,
   onAddPeerComment,
   onCompareWithActive,
+  focusedStudyId,
+  onFocusCollaborator,
+  onFocusStudy,
 }) => {
   const [workspaceView, setWorkspaceView] = useState<'profiles' | 'network'>('profiles');
   const [selectedCollaboratorId, setSelectedCollaboratorId] = useState<string | 'ALL'>(
@@ -155,6 +190,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
   const [isGeneratingStudyReport, setIsGeneratingStudyReport] = useState(false);
   const [studyReportError, setStudyReportError] = useState<string | null>(null);
   const [copiedCitation, setCopiedCitation] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // Network Builder Form States
   const [networkTitle, setNetworkTitle] = useState('');
@@ -210,7 +246,32 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
     });
   }, [samples, selectedPlanet, historyScope, selectedCollaboratorId, collaborators, studySearchQuery]);
 
+  const studyDetailRef = React.useRef<HTMLElement>(null);
+
+  const openStudy = (smp: GeologicalSample, scroll = true) => {
+    setActiveSampleDetail(smp);
+    onSelectSample(smp);
+    onFocusStudy?.(smp.id);
+    if (scroll) {
+      requestAnimationFrame(() => studyDetailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+  };
+
+  // Open the study named in the page address (shared link, Back/Forward).
+  React.useEffect(() => {
+    if (!focusedStudyId || focusedStudyId === activeSampleDetail.id) return;
+    const smp = samples.find((s) => s.id === focusedStudyId);
+    if (smp) {
+      setActiveSampleDetail(smp);
+      setWorkspaceView('profiles');
+      setHistoryScope('all_past');
+      requestAnimationFrame(() => studyDetailRef.current?.scrollIntoView({ block: 'start' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedStudyId, samples]);
+
   const handleSelectCollaborator = (colId: string | 'ALL') => {
+    onFocusCollaborator?.(colId === 'ALL' ? null : colId);
     setSelectedCollaboratorId(colId);
     setWorkspaceView('profiles');
     if (colId === 'ALL') {
@@ -228,67 +289,50 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
     }
   };
 
-  // Derive Structured Timeline & Conclusions for the Selected Study
+  // Timeline of what actually happened to the study: its own recorded steps if any,
+  // otherwise registration + real dated review comments. Nothing is generated.
   const studyTimeline: ResearchTimelineStep[] = useMemo(() => {
     if (activeSampleDetail.timeline && activeSampleDetail.timeline.length > 0) {
       return activeSampleDetail.timeline;
     }
-    const baseDate = activeSampleDetail.collectedAt || '2026-04-15';
-    const isVerified = activeSampleDetail.status === 'verified_peer_reviewed';
-    const topMineral = Object.keys(activeSampleDetail.minerals)[0] || 'Silicatos';
-    return [
+    const steps: ResearchTimelineStep[] = [
       {
-        id: 'tl-1',
-        stage: '1. Coleta de Campo & Telemetria GPS',
-        timestamp: baseDate,
+        id: 'tl-registered',
+        stage: 'Estudo registado na plataforma',
+        timestamp: formatDay(activeSampleDetail.publishedAt || activeSampleDetail.collectedAt),
         author: activeSampleDetail.collectorName,
-        detail: `Amostragem a ${activeSampleDetail.depthCm} cm (${activeSampleDetail.coordinates[0].toFixed(3)}°, ${activeSampleDetail.coordinates[1].toFixed(3)}°) com registro oficial ${activeSampleDetail.officialSource}.`,
+        detail: `Amostra colhida em ${formatDay(activeSampleDetail.collectedAt)} · fonte: ${activeSampleDetail.officialSource}.`,
         status: 'completed',
-      },
-      {
-        id: 'tl-2',
-        stage: '2. Caracterização Mineralógica XRD & Geoquímica XRF',
-        timestamp: `${baseDate} +2d`,
-        author: activeSampleDetail.institution,
-        detail: `Quantificação de ${topMineral} (${activeSampleDetail.minerals[topMineral] ?? 0}%), pH ${activeSampleDetail.pH} e atividade de água aw ${activeSampleDetail.waterActivity}.`,
-        status: 'completed',
-      },
-      {
-        id: 'tl-3',
-        stage: '3. Calibração Espectral VIS–SWIR & Índice AFI',
-        timestamp: `${baseDate} +5d`,
-        author: 'Motor Espectral African Analogs',
-        detail: `Fidelidade global calculada em ${activeSampleDetail.fidelityScores.total}% para o alvo ${activeSampleDetail.targetPlanet} (Mineralogia ${activeSampleDetail.fidelityScores.mineralogy}%, Geoquímica ${activeSampleDetail.fidelityScores.geochemistry}%).`,
-        status: 'completed',
-      },
-      {
-        id: 'tl-4',
-        stage: '4. Revisão por Pares & Validação Aberta',
-        timestamp: activeSampleDetail.peerComments?.[0]?.timestamp || 'Em andamento',
-        author: activeSampleDetail.peerComments?.[0]?.author || 'Comitê Aberto',
-        detail:
-          activeSampleDetail.peerComments?.[0]?.content ||
-          'Aberto para verificação independente de mineralogia, espectros e replicabilidade em campo.',
-        status: isVerified ? 'completed' : 'in_progress',
-      },
-      {
-        id: 'tl-5',
-        stage: '5. Síntese Final & Conclusão Análoga',
-        timestamp: isVerified ? 'Homologado' : 'Em consolidação',
-        author: activeSampleDetail.collectorName,
-        detail:
-          activeSampleDetail.conclusion ||
-          `Estudo validado como análogo de referência para ${activeSampleDetail.targetPlanet} com aderência de ${activeSampleDetail.fidelityScores.total}% (${activeSampleDetail.rockClassification}).`,
-        status: isVerified ? 'completed' : 'in_progress',
       },
     ];
+    for (const c of activeSampleDetail.peerComments || []) {
+      steps.push({
+        id: `tl-${c.id}`,
+        stage: c.statusChange === 'approved' ? 'Endosso de revisor' : 'Comentário de revisão',
+        timestamp: formatDay(c.timestamp),
+        author: c.author,
+        detail: c.content,
+        status: 'completed',
+      });
+    }
+    const endorsements = validEndorserIds(activeSampleDetail).length;
+    steps.push({
+      id: 'tl-validation',
+      stage: 'Validação pela comunidade',
+      timestamp: endorsements >= REQUIRED_ENDORSEMENTS ? 'Concluída' : 'Em curso',
+      author: 'Regra da plataforma',
+      detail: `${endorsements} de ${REQUIRED_ENDORSEMENTS} endossos independentes necessários.`,
+      status: endorsements >= REQUIRED_ENDORSEMENTS ? 'completed' : 'in_progress',
+    });
+    return steps;
   }, [activeSampleDetail]);
 
   const studyConclusionText = useMemo(() => {
     if (activeSampleDetail.conclusion) return activeSampleDetail.conclusion;
-    const siteMatch = sites.find((s) => s.id === activeSampleDetail.siteId);
-    return `A amostra ${activeSampleDetail.name} (${activeSampleDetail.rockClassification}) alcançou índice de fidelidade planetária AFI de ${activeSampleDetail.fidelityScores.total}% frente a ${activeSampleDetail.targetPlanet}. Os parâmetros de atividade hídrica (aw ${activeSampleDetail.waterActivity}) e pH ${activeSampleDetail.pH} sustentam a equivalência geoquímica com ${siteMatch?.planetaryCounterpart || activeSampleDetail.targetPlanet}, recomendando calibração complementar sob atmosfera simulada.`;
-  }, [activeSampleDetail, sites]);
+    const f = activeSampleDetail.fidelityScores;
+    const coverage = typeof f.coverage === 'number' ? ` (dados medidos cobrem ${Math.round(f.coverage * 100)}% dos critérios)` : '';
+    return `O autor ainda não escreveu uma conclusão. Semelhança calculada com ${getCelestialBodyLabel(activeSampleDetail.targetPlanet)}: ${f.total}%${coverage}.`;
+  }, [activeSampleDetail]);
 
   const studyReportSite = sites.find((s) => s.id === activeSampleDetail.siteId) || sites[0];
 
@@ -308,11 +352,18 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       collaboratorId: activeCollaborator.id,
       sender: 'user',
       senderName: currentUser ? `${currentUser.name} (${currentUser.codename})` : 'Você (Pesquisador)',
-      timestamp: 'Agora',
+      senderId: currentUser?.id,
+      timestamp: formatMessageTime(new Date()),
+      sentAt: new Date().toISOString(),
       content: text,
     });
 
     if (currentUser && activeCollaborator.id === currentUser.id) {
+      return;
+    }
+
+    // Never let the AI speak on behalf of a real registered person.
+    if (activeCollaborator.isLocalRegistered) {
       return;
     }
 
@@ -322,7 +373,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `Responda em primeira pessoa como ${activeCollaborator.name} (${activeCollaborator.role}, ${activeCollaborator.institution}). Um pesquisador da rede enviou: "${text}". Responda de forma breve (2-4 frases), objetiva e colaborativa em português.`,
+          prompt: `És o copiloto de IA da plataforma (não és uma pessoa e não deves fingir ser). O utilizador escreveu ao perfil de demonstração "${activeCollaborator.name}" (tema: ${activeCollaborator.specialty}): "${text}". Responde como assistente, de forma breve (2-4 frases), objetiva e em português, sem inventar dados, medições ou colaborações.`,
           targetPlanet: activeCollaborator.focusPlanets[0] || 'Mars',
           activeSample: activeSampleDetail,
         }),
@@ -334,8 +385,9 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
             id: `dm-rep-${Date.now()}`,
             collaboratorId: activeCollaborator.id,
             sender: 'researcher',
-            senderName: activeCollaborator.name,
-            timestamp: 'Agora',
+            senderName: 'Copiloto IA (resposta automática)',
+            timestamp: formatMessageTime(new Date()),
+            sentAt: new Date().toISOString(),
             content: data.reply,
           });
         }
@@ -366,7 +418,9 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       collaboratorId: leadCollaborator.id,
       sender: 'user',
       senderName: currentUser ? `${currentUser.name} (${currentUser.codename})` : 'Você (Co-investigador)',
-      timestamp: 'Agora',
+      senderId: currentUser?.id,
+      timestamp: formatMessageTime(new Date()),
+      sentAt: new Date().toISOString(),
       content: text,
     });
 
@@ -380,7 +434,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `Responda em primeira pessoa como ${activeSampleDetail.collectorName} (${activeSampleDetail.institution}) dentro do espaço de bate-papo específico da pesquisa "${activeSampleDetail.name}" (Alvo: ${activeSampleDetail.targetPlanet}, AFI: ${activeSampleDetail.fidelityScores.total}%, aw: ${activeSampleDetail.waterActivity}, pH: ${activeSampleDetail.pH}). Mensagem do colaborador: "${text}". Responda em português de forma técnica, cordial e colaborativa (2-4 frases).`,
+          prompt: `És o copiloto de IA da plataforma (não és o autor do estudo e não deves fingir ser uma pessoa). No espaço de discussão do estudo "${activeSampleDetail.name}" (Alvo: ${activeSampleDetail.targetPlanet}, AFI: ${activeSampleDetail.fidelityScores.total}%, aw: ${activeSampleDetail.waterActivity}, pH: ${activeSampleDetail.pH}), um colaborador escreveu: "${text}". Responde como assistente, em português, de forma técnica e breve (2-4 frases), sem inventar dados.`,
           targetPlanet: activeSampleDetail.targetPlanet,
           activeSample: activeSampleDetail,
           siteContext: studyReportSite,
@@ -394,8 +448,9 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
             id: `st-rep-${Date.now()}`,
             collaboratorId: leadCollaborator.id,
             sender: 'researcher',
-            senderName: activeSampleDetail.collectorName,
-            timestamp: 'Agora',
+            senderName: 'Copiloto IA (resposta automática)',
+            timestamp: formatMessageTime(new Date()),
+            sentAt: new Date().toISOString(),
             content: data.reply,
           });
         }
@@ -407,10 +462,13 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
     }
   };
 
+  const endorseBlock = endorseBlockReason(activeSampleDetail, currentUser?.id);
+  const endorsementCount = validEndorserIds(activeSampleDetail).length;
+
   const handlePostContribution = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim() || !activeSampleDetail) return;
-    onAddPeerComment(activeSampleDetail.id, newComment.trim(), endorsed);
+    if (!currentUser || !newComment.trim() || !activeSampleDetail) return;
+    onAddPeerComment(activeSampleDetail.id, newComment.trim(), endorsed && endorseBlock === null);
     setNewComment('');
     setEndorsed(false);
     setContributionNotice(`Contribuição científica registrada em "${activeSampleDetail.name}".`);
@@ -446,7 +504,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
   };
 
   const handleCopyCitation = (sample: GeologicalSample) => {
-    const citation = `${sample.collectorName} et al. (${sample.collectedAt.split('-')[0]}). "${sample.name}". African Analogs / ${sample.officialSource}. Hash: ${sample.hash}. Coordenadas: [${sample.coordinates[0]}, ${sample.coordinates[1]}].`;
+    const citation = `${sample.collectorName} (${sample.collectedAt.split('-')[0]}). "${sample.name}". African Analogs. ${sample.officialSource}. ${studyLink(sample.id)} (${sample.hash}).`;
     navigator.clipboard.writeText(citation);
     setCopiedCitation(sample.id);
     setTimeout(() => setCopiedCitation(null), 2500);
@@ -476,14 +534,32 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       targetPlanet: networkTarget,
       objective: networkObjective.trim(),
       memberIds: Array.from(new Set([currentUser?.id || 'user-self', ...networkSelectedMembers])),
+      createdBy: currentUser?.id,
       createdAt: new Date().toISOString().split('T')[0],
     };
     onCreateNetworkGroup(newGroup);
     setNetworkTitle('');
     setNetworkObjective('');
-    setNetworkNotice(`Network "${newGroup.title}" criada com ${newGroup.memberIds.length} membros.`);
+    setNetworkNotice(`Grupo "${newGroup.title}" criado com ${newGroup.memberIds.length} membros.`);
     setTimeout(() => setNetworkNotice(null), 4000);
   };
+
+  // GitHub-style activity: computed from real, dated actions only.
+  const contributionSources = useMemo(
+    () => ({ samples, studyThreads, networkGroups }),
+    [samples, studyThreads, networkGroups]
+  );
+  const activeContributions = useMemo(
+    () => (activeCollaborator ? collectContributions(activeCollaborator, contributionSources) : []),
+    [activeCollaborator, contributionSources]
+  );
+  const pointsByCollaborator = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const col of collaborators) {
+      map.set(col.id, collectContributions(col, contributionSources).reduce((sum, e) => sum + e.points, 0));
+    }
+    return map;
+  }, [collaborators, contributionSources]);
 
   const isConnected = activeCollaborator ? connectedIds.includes(activeCollaborator.id) : false;
   const activeDirectThread = activeCollaborator ? directThreads[activeCollaborator.id] || [] : [];
@@ -785,7 +861,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                       <div key={group.id} className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] flex flex-col justify-between space-y-3">
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-[#1E3A8A] dark:text-[#60A5FA] font-semibold">{group.targetPlanet}</span>
+                            <span className="text-[#1E3A8A] dark:text-[#60A5FA] font-semibold">{getCelestialBodyLabel(group.targetPlanet)}</span>
                             <span className="text-[#475569] dark:text-[#94A3B8]">{group.createdAt}</span>
                           </div>
                           <h3 className="font-poppins text-sm font-bold text-[#0F172A] dark:text-[#F0F6FC]">{group.title}</h3>
@@ -892,6 +968,13 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                     {activeCollaborator.bio}
                   </p>
 
+                  <div className="pt-4 border-t border-[#E2E8F0] dark:border-[#30363D]">
+                    <ContributionGraph
+                      events={activeContributions}
+                      ownerLabel={currentUser && currentUser.id === activeCollaborator.id ? 'você' : activeCollaborator.name}
+                    />
+                  </div>
+
                   {/* Compact Direct Profile Conversation */}
                   <details className="bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-3.5">
                     <summary className="text-xs font-semibold text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer flex items-center justify-between select-none">
@@ -920,7 +1003,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                         {isDirectReplying && (
                           <div className="flex items-center gap-2 text-xs text-[#475569] dark:text-[#94A3B8] p-1">
                             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1E3A8A]" strokeWidth={1.75} />
-                            <span>{activeCollaborator.name} está respondendo...</span>
+                            <span>Copiloto IA a responder…</span>
                           </div>
                         )}
                       </div>
@@ -957,7 +1040,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
                     <h3 id="public-studies-heading" className="font-poppins text-sm sm:text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                      Pesquisas Anteriores ({publicResearches.length})
+                      Estudos ({publicResearches.length})
                     </h3>
                   </div>
 
@@ -1045,10 +1128,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                           key={smp.id}
                           type="button"
                           aria-pressed={isSelected}
-                          onClick={() => {
-                            setActiveSampleDetail(smp);
-                            onSelectSample(smp);
-                          }}
+                          onClick={() => openStudy(smp)}
                           className={`w-full text-left p-4 rounded-xl transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] ${
                             isSelected
                               ? 'bg-[#F1F5F9] dark:bg-[#21262D] shadow-xs'
@@ -1057,10 +1137,13 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                         >
                           <div className="flex items-center justify-between text-xs mb-1">
                             <span className="font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">
-                              {smp.targetPlanet} · {smp.collectedAt}
+                              {getCelestialBodyLabel(smp.targetPlanet)} · {formatDay(smp.collectedAt)}
                             </span>
-                            <span className="font-mono font-semibold text-[#15803D] dark:text-[#4ADE80] tabular-nums">
-                              {smp.fidelityScores.total}% parecido
+                            <span
+                              className={`font-mono font-semibold tabular-nums ${similarityTone(smp.fidelityScores.total)}`}
+                              title={`Semelhança calculada com ${getCelestialBodyLabel(smp.targetPlanet)}`}
+                            >
+                              {smp.fidelityScores.total}%
                             </span>
                           </div>
                           <div className="text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] line-clamp-1">
@@ -1084,6 +1167,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
 
               {/* BENTO 3: Selected Research Workspace (Conversa | Dados | Resumo | Etapas & Conclusão) */}
               <section
+                ref={studyDetailRef}
                 aria-labelledby="study-detail-heading"
                 className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs space-y-5 transition-colors duration-150"
               >
@@ -1091,7 +1175,9 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2 text-[#475569] dark:text-[#94A3B8]">
-                      <span className="font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">{activeSampleDetail.targetPlanet}</span>
+                      <span className="font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">
+                        Análogo de {getCelestialBodyLabel(activeSampleDetail.targetPlanet)}
+                      </span>
                       <span aria-hidden="true">·</span>
                       <span>{activeSampleDetail.officialSource}</span>
                     </div>
@@ -1099,11 +1185,13 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                     {activeSampleDetail.status === 'verified_peer_reviewed' ? (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-[#15803D] dark:text-[#4ADE80] bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-lg">
                         <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                        <span>Revisada por Colaboradores</span>
+                        <span>Validado por {endorsementCount} revisores</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-xs font-medium text-[#B45309] dark:text-[#FBBF24] bg-amber-50 dark:bg-amber-950/50 px-2.5 py-0.5 rounded-lg">
-                        <span>Aberta para Comentários</span>
+                        <span>
+                          Em revisão · {endorsementCount}/{REQUIRED_ENDORSEMENTS} endossos
+                        </span>
                       </span>
                     )}
                   </div>
@@ -1115,8 +1203,42 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                       </h3>
                       <p className="text-xs sm:text-sm text-[#475569] dark:text-[#94A3B8]">
                         Lugar: <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{activeSampleDetail.customLocation || studyReportSite.name}</strong> · Publicado por{' '}
-                        <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{activeSampleDetail.collectorName}</strong> ({activeSampleDetail.institution})
+                        {(() => {
+                          const author = collaborators.find(
+                            (c) => c.id === activeSampleDetail.collaboratorId || c.name === activeSampleDetail.collectorName
+                          );
+                          return author ? (
+                            <a
+                              href={`#/comunidade/pessoa/${encodeURIComponent(author.id)}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleSelectCollaborator(author.id);
+                              }}
+                              className="font-semibold text-[#1E3A8A] dark:text-[#60A5FA] underline underline-offset-2"
+                            >
+                              {activeSampleDetail.collectorName}
+                            </a>
+                          ) : (
+                            <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{activeSampleDetail.collectorName}</strong>
+                          );
+                        })()}{' '}
+                        ({activeSampleDetail.institution}) · {formatDay(activeSampleDetail.collectedAt)}
                       </p>
+                      {studyReportSite.references?.[0] && (
+                        <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
+                          Referência do sítio:{' '}
+                          <a
+                            href={studyReportSite.references[0].url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#1E3A8A] dark:text-[#60A5FA] underline underline-offset-2 inline-flex items-center gap-1"
+                          >
+                            {studyReportSite.references[0].citation.split('(')[0].trim()} ({studyReportSite.references[0].citation.match(/\((\d{4})\)/)?.[1]})
+                            <ExternalLink className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
+                            <span className="sr-only">(abre noutro separador)</span>
+                          </a>
+                        </p>
+                      )}
                     </div>
 
                     <button
@@ -1124,8 +1246,24 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                       onClick={() => onCompareWithActive(activeSampleDetail)}
                       className="min-h-[38px] py-1.5 px-3.5 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0"
                     >
-                      <span>Abrir na Pesquisa</span>
+                      <span>Comparar com a minha amostra</span>
                       <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(studyLink(activeSampleDetail.id));
+                        setCopiedLink(activeSampleDetail.id);
+                        setTimeout(() => setCopiedLink(null), 2500);
+                      }}
+                      className="min-h-[38px] py-1.5 px-3.5 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {copiedLink === activeSampleDetail.id ? (
+                        <Check className="w-3.5 h-3.5 text-[#15803D]" strokeWidth={1.75} aria-hidden="true" />
+                      ) : (
+                        <Link2 className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+                      )}
+                      <span aria-live="polite">{copiedLink === activeSampleDetail.id ? 'Link copiado' : 'Copiar link'}</span>
                     </button>
                   </div>
                 </div>
@@ -1236,7 +1374,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                         {isStudyReplying && (
                           <div className="flex items-center gap-2 text-xs text-[#475569] dark:text-[#94A3B8] p-2">
                             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#1E3A8A]" strokeWidth={1.75} />
-                            <span>{activeCollaborator?.name || activeSampleDetail.collectorName} está respondendo...</span>
+                            <span>Copiloto IA a responder…</span>
                           </div>
                         )}
                       </div>
@@ -1280,11 +1418,11 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                               <div>
                                 <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{c.author}</strong>
-                                <span className="text-[#475569] dark:text-[#94A3B8]"> · {c.institution} · {c.timestamp}</span>
+                                <span className="text-[#475569] dark:text-[#94A3B8]"> · {c.institution} · {formatDay(c.timestamp)}</span>
                               </div>
                               {c.statusChange === 'approved' && (
                                 <span className="text-[#15803D] dark:text-[#4ADE80] bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-lg font-medium">
-                                  Recomendada
+                                  Endosso
                                 </span>
                               )}
                             </div>
@@ -1293,6 +1431,11 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                         ))}
                       </div>
 
+                      {!currentUser ? (
+                        <p className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] text-xs text-[#475569] dark:text-[#94A3B8]">
+                          Entre na sua conta para comentar ou endossar este estudo.
+                        </p>
+                      ) : (
                       <form onSubmit={handlePostContribution} className="space-y-2.5 pt-1">
                         <textarea
                           rows={2}
@@ -1302,15 +1445,25 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                           className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm p-3 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                         />
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <label className="flex items-center gap-2 text-xs text-[#475569] dark:text-[#94A3B8] cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={endorsed}
-                              onChange={(e) => setEndorsed(e.target.checked)}
-                              className="w-4 h-4 accent-[#1E3A8A] rounded cursor-pointer"
-                            />
-                            <span>Recomendar esta pesquisa</span>
-                          </label>
+                          {endorseBlock === null ? (
+                            <label className="flex items-center gap-2 text-xs text-[#475569] dark:text-[#94A3B8] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={endorsed}
+                                onChange={(e) => setEndorsed(e.target.checked)}
+                                className="w-4 h-4 accent-[#1E3A8A] rounded cursor-pointer"
+                              />
+                              <span>
+                                Endossar este estudo ({endorsementCount}/{REQUIRED_ENDORSEMENTS} para validação)
+                              </span>
+                            </label>
+                          ) : (
+                            <span className="text-xs text-[#64748B] dark:text-[#8B949E]">
+                              {endorseBlock === 'own_study'
+                                ? 'Não pode endossar o seu próprio estudo.'
+                                : 'Já endossou este estudo.'}
+                            </span>
+                          )}
                           <button
                             type="submit"
                             disabled={!newComment.trim()}
@@ -1320,6 +1473,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                           </button>
                         </div>
                       </form>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1430,7 +1584,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                             </div>
                           ))}
                         </div>
-                        <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] bg-[#FFFFFF] dark:bg-[#161B22] p-2 rounded-lg">
+                        <div className="grid grid-cols-5 gap-1.5 text-center text-xs bg-[#FFFFFF] dark:bg-[#161B22] p-2 rounded-lg">
                           <div>
                             <div className="text-[#475569] dark:text-[#94A3B8]">Rochas</div>
                             <div className="font-mono font-bold text-[#1E3A8A] dark:text-[#60A5FA]">{activeSampleDetail.fidelityScores.mineralogy}%</div>
@@ -1612,7 +1766,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                     <div className="p-5 rounded-xl bg-emerald-50/75 dark:bg-emerald-950/30 space-y-2">
                       <div className="flex items-center gap-2 text-sm font-bold text-[#15803D] dark:text-[#4ADE80]">
                         <CheckCircle2 className="w-4 h-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                        <span>Conclusão Final</span>
+                        <span>{activeSampleDetail.conclusion ? 'Conclusão do autor' : 'Conclusão'}</span>
                       </div>
                       <p className="text-xs sm:text-sm text-[#0F172A] dark:text-[#E2E8F0] leading-relaxed">
                         {studyConclusionText}
@@ -1690,7 +1844,10 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                       </span>
                       <span className="text-[#475569] dark:text-[#94A3B8] shrink-0 tabular-nums">
                         {colConnected ? 'Conectado · ' : ''}
-                        {studyCount} {studyCount === 1 ? 'pesquisa' : 'pesquisas'}
+                        {studyCount} {studyCount === 1 ? 'pesquisa' : 'pesquisas'} ·{' '}
+                        <span title="Pontos de contribuição (ver perfil)">
+                          {(pointsByCollaborator.get(col.id) || 0).toLocaleString('pt-PT')} pts
+                        </span>
                       </span>
                     </div>
 

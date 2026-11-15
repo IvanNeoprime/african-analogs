@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local runtime data (accounts, sessions, studies)
+.local-data/
+
+# Build output
+server.js

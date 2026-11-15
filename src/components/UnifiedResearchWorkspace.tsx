@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import L from 'leaflet';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnalogueSite, CollaboratorProfile, GeologicalSample, LatestAiAnalysisSnapshot, PlanetaryTarget } from '../types';
 import { HARDCODED_API_ENDPOINTS, fetchOfficialElevation, fetchOfficialNasaEvents, NasaEonetEventItem } from '../services/officialApis';
 import {
@@ -7,8 +6,10 @@ import {
   generateSpectralReflectanceCurve,
   parseUserInjectedData,
 } from '../services/spectralEngine';
+import { computeSampleFingerprint } from '../services/fingerprint';
 import { AnalogueDashboard } from './AnalogueDashboard';
 import { NasaDataShortcutsModal, NasaShortcutFilter } from './NasaDataShortcutsModal';
+import { InteractiveSiteMap, InteractiveSiteMapHandle, MapPickedPoint } from './InteractiveSiteMap';
 import {
   DWARF_PLANET_BODIES,
   getCelestialBodyFullLabel,
@@ -260,9 +261,10 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const liveAFI = useMemo(() => {
     return computeAnalogueFidelity(
       { targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals },
-      targetPlanet
+      targetPlanet,
+      sites.find((s) => s.id === siteId) || selectedSite
     );
-  }, [targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals]);
+  }, [targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals, siteId, sites, selectedSite]);
 
   // --- Computer Vision & Real-Time Camera + TIFF / Encrypted Image States ---
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -319,11 +321,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   }, []);
 
   // --- Map States (NASA SRTM DEM Topography Default + Live NASA EONET Events) ---
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersLayerRef = useRef<L.LayerGroup | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const [layerType, setLayerType] = useState<'topo' | 'gibs_satellite'>('topo');
+  const mapRef = useRef<InteractiveSiteMapHandle>(null);
   const [filterRegionOrPlanet, setFilterRegionOrPlanet] = useState<string>('ALL');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [showNasaEvents, setShowNasaEvents] = useState(false);
@@ -351,7 +349,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
   const reportSectionRef = useRef<HTMLElement>(null);
 
-  const filteredSites = sites.filter((s) => {
+  const filteredSites = useMemo(() => sites.filter((s) => {
     const regionOk =
       filterRegionOrPlanet === 'ALL'
         ? true
@@ -368,127 +366,28 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       s.targetPlanet.toLowerCase().includes(q) ||
       s.primaryMinerals.some((m) => m.toLowerCase().includes(q))
     );
-  });
+  }), [sites, filterRegionOrPlanet, siteSearchQuery]);
 
-  // Init Leaflet Map
-  useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current) return;
+  const handleMapSelectSite = useCallback(
+    (site: AnalogueSite) => {
+      onSelectSite(site);
+      setTargetPlanet(site.targetPlanet);
+      setSiteId(site.id);
+    },
+    [onSelectSite]
+  );
 
-    const map = L.map(mapContainerRef.current, {
-      center: [selectedSite.coordinates[0], selectedSite.coordinates[1]],
-      zoom: 3,
-      minZoom: 2,
-      maxZoom: 13,
-      attributionControl: false,
-    });
-
-    mapInstanceRef.current = map;
-    markersLayerRef.current = L.layerGroup().addTo(map);
-
-    return () => {
-      map.remove();
-      mapInstanceRef.current = null;
-    };
-  }, []);
-
-  // Switch Map Layer (Default: NASA SRTM DEM via OpenTopoMap)
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    if (tileLayerRef.current) {
-      map.removeLayer(tileLayerRef.current);
+  const handleUseMapPoint = (point: MapPickedPoint) => {
+    setCurrentCoords({ lat: point.lat, lng: point.lng });
+    setGpsAccuracy(null);
+    setUseLocationForAI(true);
+    const parts = [`Ponto escolhido no mapa (${point.lat.toFixed(4)}°, ${point.lng.toFixed(4)}°)`];
+    if (point.elevationMeters !== null) parts.push(`altitude SRTM ${point.elevationMeters} m`);
+    if (point.nearestSite && point.nearestDistanceKm !== null) {
+      parts.push(`análogo mais próximo: ${point.nearestSite.name} a ${Math.round(point.nearestDistanceKm)} km`);
     }
-
-    const url =
-      layerType === 'topo'
-        ? HARDCODED_API_ENDPOINTS.OPENTOPO_SRTM_TILES
-        : HARDCODED_API_ENDPOINTS.NASA_GIBS_WMTS;
-
-    const tile = L.tileLayer(url, { maxZoom: 12 }).addTo(map);
-    tileLayerRef.current = tile;
-  }, [layerType]);
-
-  // Render Site Markers
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    const layer = markersLayerRef.current;
-    if (!map || !layer) return;
-
-    layer.clearLayers();
-
-    filteredSites.forEach((site) => {
-      const isSelected = site.id === selectedSite.id;
-      const pinColor = isSelected ? '#1E3A8A' : '#0F172A';
-      const bgFill = isSelected ? '#1E3A8A' : '#FFFFFF';
-      const textFill = isSelected ? '#FFFFFF' : '#0F172A';
-
-      const customIcon = L.divIcon({
-        className: 'custom-site-pin',
-        html: `
-          <div style="
-            width: 24px;
-            height: 24px;
-            background-color: ${bgFill};
-            border: 2px solid ${pinColor};
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            font-weight: 600;
-            color: ${textFill};
-            box-shadow: 0 1px 3px rgba(15,23,42,0.22);
-            cursor: pointer;
-          ">
-            ${site.targetPlanet.charAt(0)}
-          </div>
-        `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
-
-      const marker = L.marker(site.coordinates, { icon: customIcon });
-      marker.on('click', () => {
-        onSelectSite(site);
-        setTargetPlanet(site.targetPlanet);
-        setSiteId(site.id);
-        map.flyTo(site.coordinates, 6, { duration: 0.9 });
-      });
-
-      marker.bindTooltip(
-        `<div style="font-family: 'Roboto', sans-serif; font-size: 12px; padding: 2px 4px;">
-           <strong>${site.name}</strong><br/>
-           <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: 0.8;">${site.targetPlanet} · Semelhança ${site.fidelityScore}%</span>
-         </div>`,
-        { direction: 'top' }
-      );
-
-      layer.addLayer(marker);
-    });
-
-    if (showNasaEvents) {
-      nasaEvents.forEach((ev) => {
-        if (!ev.coordinates) return;
-        const evIcon = L.divIcon({
-          className: 'nasa-eonet-pin',
-          html: `<div style="width:18px;height:18px;border-radius:50%;background:#D97706;border:2px solid #FFFFFF;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.35);">!</div>`,
-          iconSize: [18, 18],
-          iconAnchor: [9, 9],
-        });
-        const evMarker = L.marker(ev.coordinates, { icon: evIcon });
-        evMarker.bindTooltip(
-          `<div style="font-family: 'Roboto', sans-serif; font-size: 11px; padding: 2px 4px;">
-             <strong>NASA EONET: ${ev.title}</strong><br/>
-             <span>${ev.category}${ev.date ? ` · ${ev.date}` : ''}</span>
-           </div>`,
-          { direction: 'top' }
-        );
-        layer.addLayer(evMarker);
-      });
-    }
-  }, [filteredSites, selectedSite, onSelectSite, showNasaEvents, nasaEvents]);
+    setGpsNote(parts.join(' · ') + '.');
+  };
 
   const handleToggleNasaEvents = async () => {
     const next = !showNasaEvents;
@@ -536,7 +435,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         setGpsAccuracy(Math.round(position.coords.accuracy));
         setUseLocationForAI(true);
         setGpsLoading(false);
-        mapInstanceRef.current?.flyTo([coords.lat, coords.lng], 7, { duration: 1.0 });
+        mapRef.current?.flyTo([coords.lat, coords.lng], 7);
         const dem = await fetchOfficialElevation(coords.lat, coords.lng);
         if (dem.elevationMeters !== null) {
           setGpsNote(`Altitude SRTM oficial: ${dem.elevationMeters} m (${dem.dataset})`);
@@ -570,7 +469,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         onInjectBulkSamples(parsed);
         setAttachedDocName(file.name);
         setAttachedDocContent(text);
-        setImportNotice(`${parsed.length} registro(s) oficial(is) carregado(s) de ${file.name} para a dashboard e analista IA.`);
+        const incomplete = parsed.filter((row) => row.unmeasured.length > 0).length;
+        setImportNotice(
+          `${parsed.length} registo(s) carregado(s) de ${file.name}.` +
+            (incomplete > 0
+              ? ` ${incomplete} com campos em falta (marcados como não medidos e excluídos do cálculo de semelhança).`
+              : '')
+        );
       } catch (err: any) {
         setImportError(err.message || 'Falha ao processar arquivo CSV ou JSON.');
       }
@@ -709,7 +614,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     const parsedMinerals = parseManualMineralsInput(mineralsManualText);
     const manualAFI = computeAnalogueFidelity(
       { targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals: parsedMinerals },
-      targetPlanet
+      targetPlanet,
+      chosenSite
     );
     const curve = generateSpectralReflectanceCurve(parsedMinerals);
 
@@ -734,10 +640,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       fidelityScores: manualAFI,
       fieldNotes,
       collectedAt: new Date().toISOString().split('T')[0],
-      hash: '0x' + Math.random().toString(16).substring(2, 16),
+      hash: '',
       version: 'v1.0.0-manual',
+      publishedAt: new Date().toISOString(),
       status: 'under_review',
+      // Manually entered values are measurements; clear any import placeholders.
+      unmeasured: Object.keys(parsedMinerals).length === 0 ? ['minerals'] : [],
     };
+    updated.hash = computeSampleFingerprint(updated);
 
     onSaveSample(updated);
     onSelectSite(chosenSite);
@@ -775,11 +685,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         setGpsNote(
           `Coordenadas extraídas do GeoTIFF (${processed.metadata.geoCoords.lat.toFixed(4)}°, ${processed.metadata.geoCoords.lng.toFixed(4)}°).`
         );
-        mapInstanceRef.current?.flyTo(
-          [processed.metadata.geoCoords.lat, processed.metadata.geoCoords.lng],
-          7,
-          { duration: 1.0 }
-        );
+        mapRef.current?.flyTo([processed.metadata.geoCoords.lat, processed.metadata.geoCoords.lng], 7);
       }
     } catch (err: any) {
       setPendingEncryptedFile(file);
@@ -939,8 +845,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageBase64: targetImg,
-          mimeType: mimeOverride || uploadedMimeType || 'image/jpeg',
+          // The image itself stays in the browser; only measured telemetry is sent.
           coordinates: coordsToUse,
           targetPlanet,
           rasterMetadata: rasterOverride !== undefined ? rasterOverride : rasterMetadata,
@@ -1266,13 +1171,29 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <h2 id="unified-input-heading" className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
                   Dados da Pesquisa &amp; Copiloto
                 </h2>
-                <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg">
+                <span
+                  className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg cursor-help"
+                  title={liveAFI.notes.join('\n')}
+                >
                   Semelhança: <strong className="font-mono tabular-nums">{liveAFI.total}%</strong>
+                  {liveAFI.coverage < 1 && (
+                    <span className="ml-1 text-[#B45309] dark:text-[#FBBF24]">
+                      · dados {Math.round(liveAFI.coverage * 100)}%
+                    </span>
+                  )}
                 </span>
               </div>
               <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
                 Você insere os dados manualmente; a IA atua apenas como copiloto para analisar.
               </p>
+              <details className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
+                <summary className="cursor-pointer select-none">Como a semelhança é calculada</summary>
+                <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
+                  {liveAFI.notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </details>
             </div>
 
             {/* Segmented Switcher: Manual Data First + AI Copilot + Vision Copilot */}
@@ -2007,14 +1928,30 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       Parecer do Copiloto Visual IA (não altera seus dados manuais)
                     </div>
                     <div className="flex items-center justify-between font-semibold">
-                      <span className="text-[#15803D] dark:text-[#4ADE80]">Sugestão de local parecido: {visionResult.closestAnalogue}</span>
-                      <span className="font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">{visionResult.fidelityScore}%</span>
+                      <span className="text-[#15803D] dark:text-[#4ADE80]">
+                        Sugestão de local parecido: {visionResult.closestAnalogue || 'não indicada pelo modelo'}
+                      </span>
+                      <span className="font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">
+                        {typeof visionResult.fidelityScore === 'number' ? `${visionResult.fidelityScore}%` : '—'}
+                      </span>
                     </div>
-                    <div className="text-[#475569] dark:text-[#94A3B8]">
-                      O que aparece: {visionResult.features?.join(' · ')}
-                    </div>
-                    <div className="text-[#475569] dark:text-[#94A3B8]">
-                      Minerais sugeridos para conferir: {visionResult.minerals?.join(' · ')}
+                    {visionResult.parsedOk === false && (
+                      <div className="text-[#B45309] dark:text-[#FBBF24]">
+                        O modelo não respondeu no formato esperado; veja o texto completo abaixo.
+                      </div>
+                    )}
+                    {visionResult.features?.length > 0 && (
+                      <div className="text-[#475569] dark:text-[#94A3B8]">
+                        O que aparece: {visionResult.features.join(' · ')}
+                      </div>
+                    )}
+                    {visionResult.minerals?.length > 0 && (
+                      <div className="text-[#475569] dark:text-[#94A3B8]">
+                        Minerais sugeridos para conferir: {visionResult.minerals.join(' · ')}
+                      </div>
+                    )}
+                    <div className="text-[11px] text-[#64748B] dark:text-[#8B949E]">
+                      Base da análise: cores e brilho medidos na foto, metadados e as suas notas. O modelo de IA não vê a imagem.
                     </div>
                     {visionResult.diagnosis && (
                       <p className="text-[#0F172A] dark:text-[#E2E8F0] leading-relaxed">
@@ -2078,34 +2015,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           className="lg:col-span-7 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4 transition-colors duration-150"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 bg-[#F1F5F9] dark:bg-[#0D1117] p-1 rounded-xl">
-              <button
-                type="button"
-                aria-pressed={layerType === 'topo'}
-                onClick={() => setLayerType('topo')}
-                className={`py-1.5 px-3 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
-                  layerType === 'topo'
-                    ? 'bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF]'
-                    : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC]'
-                }`}
-              >
-                <Mountain className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Relevo do Terreno</span>
-              </button>
-
-              <button
-                type="button"
-                aria-pressed={layerType === 'gibs_satellite'}
-                onClick={() => setLayerType('gibs_satellite')}
-                className={`py-1.5 px-3 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
-                  layerType === 'gibs_satellite'
-                    ? 'bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF]'
-                    : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC]'
-                }`}
-              >
-                <Satellite className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Foto de Satélite</span>
-              </button>
+            <div>
+              <h2 className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
+                <Mountain className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
+                <span>Mapa de Análogos</span>
+              </h2>
+              <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5 tabular-nums">
+                {filteredSites.length} de {sites.length} lugares · clique no mapa para analisar qualquer ponto
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -2156,10 +2073,16 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             </div>
           </div>
 
-          <div
-            ref={mapContainerRef}
-            className="w-full flex-1 min-h-[320px] rounded-xl overflow-hidden z-0"
-            aria-label="Mapa interativo de lugares estudados"
+          <InteractiveSiteMap
+            ref={mapRef}
+            sites={filteredSites}
+            allSites={sites}
+            selectedSite={selectedSite}
+            onSelectSite={handleMapSelectSite}
+            showNasaEvents={showNasaEvents}
+            nasaEvents={nasaEvents}
+            userLocation={currentCoords ? { ...currentCoords, accuracy: gpsAccuracy } : null}
+            onUsePoint={handleUseMapPoint}
           />
 
           <div className="space-y-3">
@@ -2174,7 +2097,9 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               </div>
 
               <div className="text-right shrink-0 bg-[#F1F5F9] dark:bg-[#21262D] px-3 py-1.5 rounded-xl">
-                <div className="text-[11px] text-[#475569] dark:text-[#94A3B8]">Semelhança</div>
+                <div className="text-[11px] text-[#475569] dark:text-[#94A3B8]" title="Estimativa editorial, não medida">
+                  Semelhança (estimativa)
+                </div>
                 <div className="text-lg font-bold font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">
                   {selectedSite.fidelityScore}%
                 </div>
@@ -2206,12 +2131,43 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 </span>
               </div>
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                <span className="text-[#475569] dark:text-[#94A3B8] block">Fonte</span>
-                <span className="font-medium text-[#0F172A] dark:text-[#F0F6FC] truncate block mt-0.5">
-                  {selectedSite.dataSource.split('·')[0]}
-                </span>
+                <span className="text-[#475569] dark:text-[#94A3B8] block">Referência</span>
+                {selectedSite.references[0] ? (
+                  <a
+                    href={selectedSite.references[0].url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={selectedSite.references[0].citation}
+                    className="font-medium text-[#1E3A8A] dark:text-[#60A5FA] underline underline-offset-2 truncate block mt-0.5"
+                  >
+                    {selectedSite.references[0].citation.split('(')[0].trim()}
+                  </a>
+                ) : (
+                  <span className="font-medium text-[#0F172A] dark:text-[#F0F6FC] truncate block mt-0.5">—</span>
+                )}
               </div>
             </div>
+
+            {selectedSite.references.length > 0 && (
+              <details className="text-xs text-[#475569] dark:text-[#94A3B8]">
+                <summary className="cursor-pointer select-none">
+                  Referências científicas ({selectedSite.references.length})
+                </summary>
+                <ul className="mt-1.5 space-y-1">
+                  {selectedSite.references.map((ref) => (
+                    <li key={ref.url}>
+                      <a href={ref.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                        {ref.citation}
+                        {ref.doi ? <span className="font-mono"> doi:{ref.doi}</span> : null}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-[11px]">
+                  A "semelhança" de cada sítio é uma estimativa editorial; a da sua amostra é calculada a partir dos dados que inseriu.
+                </p>
+              </details>
+            )}
           </div>
         </section>
       </div>
@@ -2225,7 +2181,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         onUpdateSample={onSaveSample}
         onSelectSite={(site) => {
           onSelectSite(site);
-          mapInstanceRef.current?.flyTo(site.coordinates, 6, { duration: 0.9 });
+          mapRef.current?.flyTo(site.coordinates, 6);
         }}
       />
 
@@ -2495,7 +2451,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <th scope="col" className="py-3 px-4">País e Região</th>
                 <th scope="col" className="py-3 px-4">Planeta Parecido</th>
                 <th scope="col" className="py-3 px-4">O que tem lá</th>
-                <th scope="col" className="py-3 px-4 text-right">Semelhança</th>
+                <th scope="col" className="py-3 px-4 text-right" title="Estimativa editorial, não medida">Semelhança (est.)</th>
               </tr>
             </thead>
             <tbody>
@@ -2506,7 +2462,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   setTargetPlanet(site.targetPlanet);
                   setSiteId(site.id);
                   setCustomLocation(site.name);
-                  mapInstanceRef.current?.flyTo(site.coordinates, 6, { duration: 0.9 });
+                  mapRef.current?.flyTo(site.coordinates, 6);
                 };
                 return (
                   <tr

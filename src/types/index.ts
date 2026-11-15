@@ -59,7 +59,8 @@ export interface LocalUserAccount {
   id: string;
   email: string;
   codename: string;
-  passwordHash: string;
+  /** Legacy only: older builds kept a SHA-256 here. New accounts never have it. */
+  passwordHash?: string;
   createdAt: string;
   updatedAt: string;
   profileId: string;
@@ -80,8 +81,19 @@ export interface DirectResearchMessage {
   collaboratorId: string;
   sender: 'user' | 'researcher';
   senderName: string;
+  /** Profile id of the sender, when it is a platform user. */
+  senderId?: string;
+  /** Display text (legacy: free text such as "Agora"). */
   timestamp: string;
+  /** Exact send time (ISO 8601). Used for activity statistics. */
+  sentAt?: string;
   content: string;
+}
+
+export interface SiteReference {
+  citation: string;
+  doi?: string;
+  url: string;
 }
 
 export interface AnalogueSite {
@@ -95,7 +107,8 @@ export interface AnalogueSite {
   elevationMeters: number;
   geologyType: string;
   planetaryCounterpart: string;
-  fidelityScore: number; // 0 - 100
+  /** Editorial estimate (0-100) of how good an analogue the site is; not a measured value. */
+  fidelityScore: number;
   description: string;
   primaryMinerals: string[];
   atmosphericPressureMbar: number;
@@ -105,6 +118,8 @@ export interface AnalogueSite {
   nasaInstrumentsTested: string[];
   scientificPapersCount: number;
   dataSource: string; // e.g., "NASA PDS / OpenTopography SRTM"
+  /** Peer-reviewed publications describing the site as a planetary analogue (DOIs verified). */
+  references: SiteReference[];
   radarAxes: {
     mineralogy: number;
     geomorphology: number;
@@ -131,7 +146,11 @@ export interface ResearchNetworkGroup {
   objective: string;
   memberIds: string[];
   createdAt: string;
+  /** Profile id of the person who created the group. */
+  createdBy?: string;
 }
+
+export type UnmeasuredField = 'waterActivity' | 'pH' | 'depthCm' | 'porosityPercent' | 'minerals' | 'xrfComposition' | 'coordinates';
 
 export interface GeologicalSample {
   id: string;
@@ -158,13 +177,21 @@ export interface GeologicalSample {
     radiation: number;
     thermal: number;
     total: number;
+    /** Fraction (0-1) of the scoring inputs that were actually measured. */
+    coverage?: number;
+    /** Human-readable explanation of how the score was obtained. */
+    notes?: string[];
   };
   spectralCurve: SpectralPoint[];
+  /** Fields filled with placeholders because the source did not provide them; ignored by the AFI. */
+  unmeasured?: UnmeasuredField[];
   fieldNotes: string;
   conclusion?: string;
   reportSummary?: string;
   timeline?: ResearchTimelineStep[];
   version: string;
+  /** When the study was published on the platform (ISO 8601). */
+  publishedAt?: string;
   hash: string;
   status: 'draft' | 'under_review' | 'verified_peer_reviewed';
   officialSource: string;
@@ -195,6 +222,8 @@ export interface PeerComment {
   id: string;
   sampleId: string;
   author: string;
+  /** Profile id of the author (new comments only). */
+  authorId?: string;
   role: string;
   institution: string;
   timestamp: string;

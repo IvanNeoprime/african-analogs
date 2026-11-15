@@ -1,4 +1,4 @@
-import { fromArrayBuffer } from 'geotiff';
+// geotiff is loaded on demand (only when a TIFF is opened) to keep the initial bundle small.
 
 export type DecryptionAlgorithm =
   | 'auto'
@@ -402,6 +402,7 @@ export async function decryptEncryptedImageBytes(
 }
 
 export async function decodeTiffBytesToPng(bytes: Uint8Array, originalFileName: string, wasEncrypted: boolean, decryptionMethod?: string): Promise<ProcessedImageResult> {
+  const { fromArrayBuffer } = await import('geotiff');
   const tiff = await fromArrayBuffer(toArrayBuffer(bytes));
   const image = await tiff.getImage();
 

@@ -344,23 +344,35 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
     return { pros, cons };
   }, [activeSample, selectedSite]);
 
-  // Similarity Ranking
+  // Similarity ranking: how close the sample is to each reference site, using only the
+  // sample's own data (shared minerals, water activity, same target body). No floor/ceiling.
   const similarityRanking = useMemo(() => {
+    const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const sampleMinerals = Object.keys(activeSample.minerals || {}).map(fold);
+    const unmeasured = new Set(activeSample.unmeasured || []);
     return [...sites]
       .map((site) => {
-        const targetBonus =
-          site.targetPlanet === activeSample.targetPlanet || site.targetPlanet === 'Both' ? 6 : -10;
-        const awDelta = Math.abs(site.waterActivityAw - activeSample.waterActivity);
-        const awScore = Math.max(0, 10 - awDelta * 18);
-        const similarity = Math.min(99, Math.max(42, Math.round(site.fidelityScore * 0.88 + targetBonus + awScore)));
+        const parts: number[] = [];
+        if (sampleMinerals.length > 0 && !unmeasured.has('minerals') && site.primaryMinerals.length > 0) {
+          const shared = site.primaryMinerals.filter((m) => {
+            const stem = fold(m).split(/[\s(/-]+/)[0].slice(0, 6);
+            return stem.length >= 4 && sampleMinerals.some((sm) => sm.includes(stem));
+          }).length;
+          parts.push((100 * shared) / site.primaryMinerals.length);
+        }
+        if (!unmeasured.has('waterActivity') && Number.isFinite(activeSample.waterActivity)) {
+          parts.push(Math.max(0, 100 * (1 - Math.abs(site.waterActivityAw - activeSample.waterActivity) / 0.5)));
+        }
+        parts.push(site.targetPlanet === activeSample.targetPlanet || site.targetPlanet === 'Both' ? 100 : 0);
+        const similarity = Math.round(parts.reduce((a, b) => a + b, 0) / parts.length);
         return { site, similarity };
       })
       .sort((a, b) => b.similarity - a.similarity);
-  }, [sites, activeSample.targetPlanet, activeSample.waterActivity]);
+  }, [sites, activeSample.targetPlanet, activeSample.waterActivity, activeSample.minerals, activeSample.unmeasured]);
 
   // Spectral Line Chart Coordinates (400nm - 2500nm)
-  const sampleCurve =
-    activeSample.spectralCurve.length > 1 ? activeSample.spectralCurve : referenceSite.sampleSpectralCurve;
+  // Never draw the reference site's curve as if it were the sample's.
+  const sampleCurve = activeSample.spectralCurve.length > 1 ? activeSample.spectralCurve : [];
   const siteCurve = referenceSite.sampleSpectralCurve;
 
   const mapX = (wl: number) => 42 + ((wl - 400) / (2500 - 400)) * 450;
@@ -483,7 +495,8 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                           porosityPercent: activeSample.porosityPercent,
                           minerals: mineralsMap,
                         },
-                        activeSample.targetPlanet
+                        activeSample.targetPlanet,
+                        selectedSite
                       )
                     );
                   }}

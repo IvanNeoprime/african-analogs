@@ -17,7 +17,62 @@ const STORAGE_KEYS = {
   DIRECT_THREADS: 'african_analogs_direct_threads_v1',
   STUDY_THREADS: 'african_analogs_study_threads_v1',
   NETWORK_GROUPS: 'african_analogs_network_groups_v1',
+  SESSION_TOKEN: 'african_analogs_session_token_v2',
 } as const;
+
+const AUTH_ENDPOINTS = {
+  REGISTER: '/api/auth/register',
+  LOGIN: '/api/auth/login',
+  PASSWORD: '/api/auth/password',
+  LOGOUT: '/api/auth/logout',
+} as const;
+
+export const MIN_PASSWORD_LENGTH = 8;
+
+export function getSessionToken(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.SESSION_TOKEN);
+  } catch {
+    return null;
+  }
+}
+
+function setSessionToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(STORAGE_KEYS.SESSION_TOKEN, token);
+    else localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
+  } catch {
+    // storage unavailable: the session simply won't survive a reload
+  }
+}
+
+/** Removes password material before anything is written to the browser or sent to the server. */
+export function sanitizeAccounts(accounts: LocalUserAccount[]): LocalUserAccount[] {
+  return accounts.map(({ passwordHash: _omit, ...rest }) => rest);
+}
+
+async function postJson<T>(url: string, body: unknown, token?: string | null): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('Sem ligação ao servidor. Verifique a sua ligação e tente novamente.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error((data as any)?.error || `Erro ${res.status} no servidor.`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  return data as T;
+}
 
 export interface LocalWorkspaceState {
   accounts: LocalUserAccount[];
@@ -30,7 +85,8 @@ export interface LocalWorkspaceState {
   networkGroups: ResearchNetworkGroup[] | null;
 }
 
-export async function hashPasswordSha256(password: string): Promise<string> {
+/** Only used to migrate accounts created by older builds, which stored this hash in the browser. */
+async function legacyPasswordSha256(password: string): Promise<string> {
   const encoded = new TextEncoder().encode(`african-analogs::${password}`);
   const digest = await crypto.subtle.digest('SHA-256', encoded);
   return Array.from(new Uint8Array(digest))
@@ -38,7 +94,8 @@ export async function hashPasswordSha256(password: string): Promise<string> {
     .join('');
 }
 
-export function generateDynamicAvatarSvg(name: string, accentHex = '#1E3A8A'): string {
+/** Initials avatar; the colour comes from the name unless one is given, so people are distinguishable. */
+export function generateDynamicAvatarSvg(name: string, accentHex?: string): string {
   const initials = name
     .trim()
     .split(/\s+/)
@@ -47,12 +104,13 @@ export function generateDynamicAvatarSvg(name: string, accentHex = '#1E3A8A'): s
     .map((part) => part[0].toUpperCase())
     .join('') || 'AA';
 
-  const palette = ['#1E3A8A', '#0F766E', '#B45309', '#1D4ED8', '#047857'];
+  // Dark enough for white initials (contrast ≥ 4.5:1) and distinct from each other.
+  const palette = ['#1E3A8A', '#0F766E', '#9A3412', '#6D28D9', '#047857', '#9D174D', '#155E75', '#854D0E'];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
   }
-  const bg = accentHex || palette[hash % palette.length];
+  const bg = accentHex ?? palette[hash % palette.length];
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="80" fill="${bg}"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#FFFFFF" font-family="Roboto, Arial, sans-serif" font-size="56" font-weight="700">${initials}</text></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
@@ -99,10 +157,12 @@ export function persistAccountsAndProfiles(
   customProfiles: CollaboratorProfile[],
   sessionUserId: string | null
 ): void {
+  // Legacy hashes are kept locally only until the account is migrated on its next login.
   safeWriteJson(STORAGE_KEYS.ACCOUNTS, accounts);
   safeWriteJson(STORAGE_KEYS.PROFILES, customProfiles);
   safeWriteJson(STORAGE_KEYS.SESSION_USER_ID, sessionUserId);
-  void syncStateToLocalServer({ accounts, customProfiles });
+  // Accounts and e-mails stay private: only public profile fields are shared.
+  void syncStateToLocalServer({ customProfiles: customProfiles.map(({ email: _email, ...rest }) => rest) });
 }
 
 export function persistWorkspaceCollections(payload: {
@@ -117,14 +177,22 @@ export function persistWorkspaceCollections(payload: {
   safeWriteJson(STORAGE_KEYS.DIRECT_THREADS, payload.directThreads);
   safeWriteJson(STORAGE_KEYS.STUDY_THREADS, payload.studyThreads);
   safeWriteJson(STORAGE_KEYS.NETWORK_GROUPS, payload.networkGroups);
-  void syncStateToLocalServer(payload);
+  // Direct messages and personal connections are private and stay in this browser.
+  void syncStateToLocalServer({
+    samples: payload.samples,
+    studyThreads: payload.studyThreads,
+    networkGroups: payload.networkGroups,
+  });
 }
 
 export async function syncStateToLocalServer(partialState: Record<string, unknown>): Promise<void> {
+  // The server only accepts writes from signed-in users; anonymous work stays in this browser.
+  const token = getSessionToken();
+  if (!token) return;
   try {
     await fetch(HARDCODED_API_ENDPOINTS.BACKEND_LOCAL_STATE, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(partialState),
     });
   } catch {
@@ -169,83 +237,113 @@ export interface RegisterAccountInput {
   avatarUrl?: string;
 }
 
-export async function createLocalAccountRecord(
-  input: RegisterAccountInput,
-  existingAccounts: LocalUserAccount[],
-  existingProfiles: CollaboratorProfile[]
-): Promise<{ account: LocalUserAccount; profile: CollaboratorProfile }> {
-  const normalizedEmail = input.email.trim().toLowerCase();
-  const normalizedCodename = normalizeCodename(input.codename);
+export interface AuthResult {
+  account: LocalUserAccount;
+  token: string;
+}
 
-  if (!input.name.trim() || !normalizedEmail || !input.password) {
-    throw new Error('Preencha nome completo, e-mail e senha para concluir o cadastro.');
-  }
-  if (input.password.length < 6) {
-    throw new Error('A senha deve possuir no mínimo 6 caracteres.');
-  }
-  if (existingAccounts.some((acc) => acc.email.toLowerCase() === normalizedEmail)) {
-    throw new Error('Já existe uma conta cadastrada localmente com este e-mail.');
-  }
-  if (
-    existingAccounts.some((acc) => acc.codename.toLowerCase() === normalizedCodename.toLowerCase()) ||
-    existingProfiles.some((p) => p.codename.toLowerCase() === normalizedCodename.toLowerCase())
-  ) {
-    throw new Error(`O codinome ${normalizedCodename} já está em uso. Escolha outro identificador.`);
-  }
-
-  const nowIso = new Date().toISOString();
-  const id = `usr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  const passwordHash = await hashPasswordSha256(input.password);
-
-  const profile: CollaboratorProfile = {
+function buildProfile(id: string, input: RegisterAccountInput, email: string, codename: string): CollaboratorProfile {
+  return {
     id,
     name: input.name.trim(),
-    codename: normalizedCodename,
+    codename,
     avatarUrl: input.avatarUrl?.trim() || generateDynamicAvatarSvg(input.name),
     role: input.role.trim() || 'Pesquisador de Análogos Planetários',
     institution: input.institution.trim() || 'Pesquisador Independente',
-    country: input.country.trim() || 'Angola / África',
-    specialty: input.specialty.trim() || 'Geomorfologia Comparada e Espectroscopia de Campo',
-    bio:
-      input.bio.trim() ||
-      'Pesquisador registrado na rede African Analogs para coleta de dados oficiais e validação colaborativa.',
+    country: input.country.trim() || 'Não indicado',
+    specialty: input.specialty.trim() || 'Não indicada',
+    bio: input.bio.trim() || 'Pesquisador registado na rede African Analogs.',
     focusPlanets: input.focusPlanets.length > 0 ? input.focusPlanets : ['Mars'],
     openToContributions: input.openToContributions,
-    email: normalizedEmail,
+    email,
     orcid: input.orcid?.trim() || undefined,
-    joinedAt: nowIso.split('T')[0],
+    joinedAt: new Date().toISOString().split('T')[0],
     isLocalRegistered: true,
   };
-
-  const account: LocalUserAccount = {
-    id,
-    email: normalizedEmail,
-    codename: normalizedCodename,
-    passwordHash,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-    profileId: id,
-  };
-
-  return { account, profile };
 }
 
-export async function authenticateLocalAccount(
+/**
+ * Creates the account on the server (the password is hashed there with scrypt and
+ * never stored in the browser) and returns the public account record + its profile.
+ */
+export async function registerAccount(
+  input: RegisterAccountInput,
+  existingProfiles: CollaboratorProfile[]
+): Promise<AuthResult & { profile: CollaboratorProfile }> {
+  const email = input.email.trim().toLowerCase();
+  const codename = normalizeCodename(input.codename || input.name);
+
+  if (!input.name.trim() || !email || !input.password) {
+    throw new Error('Preencha nome completo, e-mail e senha para concluir o cadastro.');
+  }
+  if (input.password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`A senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+  }
+  if (existingProfiles.some((p) => p.codename.toLowerCase() === codename.toLowerCase())) {
+    throw new Error(`O codinome ${codename} já está em uso. Escolha outro identificador.`);
+  }
+
+  const { account, token } = await postJson<AuthResult>(AUTH_ENDPOINTS.REGISTER, {
+    email,
+    codename,
+    password: input.password,
+  });
+  setSessionToken(token);
+  return { account, token, profile: buildProfile(account.id, input, email, account.codename) };
+}
+
+/**
+ * Signs in against the server. Accounts created by older builds (password hash kept in
+ * the browser) are migrated to the server transparently on their first successful login.
+ */
+export async function loginAccount(
   identifier: string,
   password: string,
-  accounts: LocalUserAccount[]
-): Promise<LocalUserAccount> {
-  const cleanId = identifier.trim().toLowerCase();
-  const normalizedCode = cleanId.startsWith('@') ? cleanId : `@${cleanId}`;
-  const found = accounts.find(
-    (acc) => acc.email.toLowerCase() === cleanId || acc.codename.toLowerCase() === normalizedCode
-  );
-  if (!found) {
-    throw new Error('Conta não encontrada no armazenamento local. Verifique o e-mail/codinome ou crie uma nova conta.');
+  localAccounts: LocalUserAccount[]
+): Promise<AuthResult> {
+  try {
+    const result = await postJson<AuthResult>(AUTH_ENDPOINTS.LOGIN, { identifier, password });
+    setSessionToken(result.token);
+    return result;
+  } catch (err: any) {
+    if (err?.status !== 401) throw err;
+
+    const cleanId = identifier.trim().toLowerCase();
+    const asCodename = cleanId.startsWith('@') ? cleanId : `@${cleanId}`;
+    const legacy = localAccounts.find(
+      (a) => a.passwordHash && (a.email.toLowerCase() === cleanId || a.codename.toLowerCase() === asCodename)
+    );
+    if (!legacy || (await legacyPasswordSha256(password)) !== legacy.passwordHash) throw err;
+
+    const migrated = await postJson<AuthResult>(AUTH_ENDPOINTS.REGISTER, {
+      id: legacy.id,
+      email: legacy.email,
+      codename: legacy.codename,
+      password,
+    }).catch((regErr: any) => {
+      if (regErr?.status === 400 && password.length < MIN_PASSWORD_LENGTH) {
+        throw new Error(
+          `Esta conta antiga usa uma senha com menos de ${MIN_PASSWORD_LENGTH} caracteres. Crie uma conta nova com uma senha mais forte.`
+        );
+      }
+      throw regErr;
+    });
+    setSessionToken(migrated.token);
+    return migrated;
   }
-  const candidateHash = await hashPasswordSha256(password);
-  if (candidateHash !== found.passwordHash) {
-    throw new Error('Senha incorreta para esta conta.');
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`A nova senha deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.`);
   }
-  return found;
+  await postJson(AUTH_ENDPOINTS.PASSWORD, { currentPassword, newPassword }, getSessionToken());
+}
+
+export async function logoutAccount(): Promise<void> {
+  const token = getSessionToken();
+  setSessionToken(null);
+  if (token) {
+    await postJson(AUTH_ENDPOINTS.LOGOUT, {}, token).catch(() => undefined);
+  }
 }

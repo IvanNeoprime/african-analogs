@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
 
@@ -13,12 +14,36 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json({ limit: '25mb' }));
+// Images are analysed in the browser; the server only receives text and telemetry.
+app.use(express.json({ limit: '3mb' }));
+
+// --- Simple in-memory rate limiter (per IP, fixed window) ---
+function rateLimit(maxRequests: number, windowMs: number) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    entry.count += 1;
+    if (entry.count > maxRequests) {
+      res.setHeader('Retry-After', Math.ceil((entry.resetAt - now) / 1000));
+      return res.status(429).json({ error: 'Muitos pedidos seguidos. Aguarde um pouco e tente novamente.' });
+    }
+    return next();
+  };
+}
+
+const aiRateLimit = rateLimit(30, 10 * 60 * 1000);
+const authRateLimit = rateLimit(20, 15 * 60 * 1000);
 
 // Hardcoded Official Geospatial & Planetary Scientific API Endpoints
 const HARDCODED_OFFICIAL_APIS = {
   OPENTOPODATA_SRTM90M: 'https://api.opentopodata.org/v1/srtm90m',
-  NASA_EONET_V3: 'https://eonet.gsfc.nasa.gov/api/v3/events?limit=10&status=open',
+  NASA_EONET_V3: 'https://eonet.gsfc.nasa.gov/api/v3/events?limit=80&status=open',
   NASA_GIBS_WMTS:
     'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2024-06-01/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg',
   OPENTOPOMAP_DEM: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -53,16 +78,22 @@ function writeLocalDb(patch: Record<string, any>): void {
   }
 }
 
-// Hardcoded NVIDIA NIM AI Configuration (nvidia/nemotron-3.5-lightning-30b-a3b)
-const NVIDIA_API_KEY =
-  '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';
-const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+// NVIDIA NIM AI configuration — the key comes from the environment (.env), never from source code.
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY?.trim() || '';
+const NVIDIA_BASE_URL = process.env.NVIDIA_BASE_URL?.trim() || 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_MODEL = process.env.NVIDIA_MODEL?.trim() || 'nvidia/nemotron-3.5-lightning-30b-a3b';
+const AI_CONFIGURED = NVIDIA_API_KEY.length > 0;
+
+if (!AI_CONFIGURED) {
+  console.warn('NVIDIA_API_KEY não definida: as rotas de IA vão responder 503. Configure-a no ficheiro .env.');
+}
 
 const openai = new OpenAI({
-  apiKey: NVIDIA_API_KEY,
+  apiKey: NVIDIA_API_KEY || 'missing',
   baseURL: NVIDIA_BASE_URL,
 });
+
+class AiNotConfiguredError extends Error {}
 
 interface NemotronMessage {
   role: 'system' | 'user' | 'assistant';
@@ -72,13 +103,17 @@ interface NemotronMessage {
 async function runNemotronCompletion(
   messages: NemotronMessage[]
 ): Promise<{ content: string; reasoning: string }> {
+  if (!AI_CONFIGURED) {
+    throw new AiNotConfiguredError('O copiloto de IA não está configurado no servidor (falta NVIDIA_API_KEY).');
+  }
   const completion = await (openai.chat.completions.create as any)({
     model: NVIDIA_MODEL,
     messages,
-    temperature: 1,
+    // Lower temperature keeps scientific answers consistent between runs.
+    temperature: 0.4,
     top_p: 0.95,
-    max_tokens: 16384,
-    reasoning_budget: 16384,
+    max_tokens: 8192,
+    reasoning_budget: 4096,
     chat_template_kwargs: { enable_thinking: true },
     stream: true,
   });
@@ -105,7 +140,7 @@ async function runNemotronCompletion(
 }
 
 // Interactive AI Research Copilot (Prompt, Document/CSV & Optional Location)
-app.post(['/api/gemini/chat', '/api/ai/chat'], async (req, res) => {
+app.post('/api/ai/chat', aiRateLimit, async (req, res) => {
   try {
     const {
       messages = [],
@@ -191,18 +226,17 @@ Diretrizes de resposta:
     const { content, reasoning } = await runNemotronCompletion(nemotronMessages);
     return res.json({ reply: content, reasoning, model: NVIDIA_MODEL });
   } catch (error: any) {
-    console.error('Erro na rota /api/gemini/chat:', error);
-    return res.status(500).json({
+    console.error('Erro na rota /api/ai/chat:', error);
+    return res.status(error instanceof AiNotConfiguredError ? 503 : 500).json({
       error: error.message || 'Falha ao processar solicitação com a IA NVIDIA Nemotron.',
     });
   }
 });
 
 // Computer Vision & Real-time Location Analysis via Measured Pixel Telemetry + Raster Metadata + Nemotron Copilot
-app.post(['/api/gemini/vision-analyze', '/api/ai/vision-analyze'], async (req, res) => {
+app.post('/api/ai/vision-analyze', aiRateLimit, async (req, res) => {
   try {
     const {
-      imageBase64,
       coordinates,
       targetPlanet = 'Mars',
       rasterMetadata,
@@ -210,7 +244,7 @@ app.post(['/api/gemini/vision-analyze', '/api/ai/vision-analyze'], async (req, r
       visualNotes,
     } = req.body;
 
-    if (!imageBase64 && !visualTelemetry && !rasterMetadata) {
+    if (!visualTelemetry && !rasterMetadata && !visualNotes) {
       return res.status(400).json({ error: 'Nenhuma imagem ou telemetria visual fornecida para análise.' });
     }
 
@@ -285,30 +319,35 @@ Responda obrigatoriamente neste formato textual exato em português (NÃO coloqu
 
     const cleanOuterParens = (val: string) => val.replace(/^\(([\s\S]*)\)$/, '$1').trim();
 
-    const extract = (tag: string, defaultVal: string) => {
+    // Missing tags stay empty: never substitute plausible-looking values the model did not give.
+    const extract = (tag: string): string | null => {
       const regex = new RegExp(`\\[${tag}\\]:\\s*(.+?)(?=\\n\\[|$)`, 's');
       const match = reply.match(regex);
-      return match ? cleanOuterParens(match[1].trim()) : defaultVal;
+      return match ? cleanOuterParens(match[1].trim()) : null;
     };
 
-    const planetaryMatch = extract('CORPO_ANALOGO_PROVAVEL', targetPlanet);
-    const scoreStr = extract('ESCORE_FIDELIDADE', '82');
-    const fidelityScore = parseInt(scoreStr.replace(/\D/g, ''), 10) || 82;
-    const closestAnalogue = extract('ANALOGO_TERRESTRE_MAIS_PROXIMO', 'Depressão de Danakil & Dallol');
-    const featuresRaw = extract('FEICOES_GEOLOGICAS_IDENTIFICADAS', 'Textura de regolito; contraste superficial; albedo moderado');
-    const mineralsRaw = extract('MINERAIS_DETECTADOS_VISAO', 'Silicatos, Óxidos de Ferro');
-    const instruments = extract('ADEQUACAO_INSTRUMENTAL', 'Mastcam-Z, ChemCam, SuperCam');
-    const diagnosis = extract('DIAGNOSTICO_CIENTIFICO', reply);
+    const planetaryMatch = extract('CORPO_ANALOGO_PROVAVEL');
+    const scoreStr = extract('ESCORE_FIDELIDADE');
+    const parsedScore = scoreStr ? parseInt(scoreStr.replace(/\D/g, ''), 10) : NaN;
+    const fidelityScore = Number.isFinite(parsedScore) ? Math.min(100, Math.max(0, parsedScore)) : null;
+    const closestAnalogue = extract('ANALOGO_TERRESTRE_MAIS_PROXIMO');
+    const featuresRaw = extract('FEICOES_GEOLOGICAS_IDENTIFICADAS') || '';
+    const mineralsRaw = extract('MINERAIS_DETECTADOS_VISAO') || '';
+    const instruments = extract('ADEQUACAO_INSTRUMENTAL');
+    const diagnosis = extract('DIAGNOSTICO_CIENTIFICO') || reply;
+    const parsedOk = planetaryMatch !== null && fidelityScore !== null;
 
     const featureDelimiter = featuresRaw.includes(';') ? /[;\n•]+/ : /[,;\n•]+(?![^()]*\))/;
 
     return res.json({
       success: true,
+      parsedOk,
+      basis: 'Estatísticas de pixels medidas no navegador + metadados + notas do utilizador (o modelo não vê a imagem).',
       rawText: reply,
       reasoning,
       model: NVIDIA_MODEL,
       planetaryMatch,
-      fidelityScore: Math.min(99, Math.max(30, fidelityScore)),
+      fidelityScore,
       closestAnalogue,
       features: featuresRaw.split(featureDelimiter).map((s) => cleanOuterParens(s.trim())).filter((s) => s.length > 2),
       minerals: mineralsRaw.split(/[,;\n•]+/).map((s) => cleanOuterParens(s.trim())).filter((s) => s.length > 2),
@@ -317,14 +356,14 @@ Responda obrigatoriamente neste formato textual exato em português (NÃO coloqu
     });
   } catch (error: any) {
     console.error('Erro na visão computacional:', error);
-    return res.status(500).json({
+    return res.status(error instanceof AiNotConfiguredError ? 503 : 500).json({
       error: error.message || 'Falha ao processar análise visual com NVIDIA Nemotron.',
     });
   }
 });
 
 // Menu-driven Scientific Diagnostics Pathway
-app.post(['/api/gemini/diagnostics', '/api/ai/diagnostics'], async (req, res) => {
+app.post('/api/ai/diagnostics', aiRateLimit, async (req, res) => {
   try {
     const { action, sample, site, targetPlanet, coordinates } = req.body;
 
@@ -360,14 +399,14 @@ Estruture a resposta com:
     return res.json({ result: content, reasoning, model: NVIDIA_MODEL });
   } catch (error: any) {
     console.error('Erro na rota de diagnósticos:', error);
-    return res.status(500).json({
+    return res.status(error instanceof AiNotConfiguredError ? 503 : 500).json({
       error: error.message || 'Falha ao executar diagnóstico.',
     });
   }
 });
 
 // Formal Planetary Analogue Technical Report Generator (Copilot Draft)
-app.post(['/api/gemini/generate-report', '/api/ai/generate-report'], async (req, res) => {
+app.post('/api/ai/generate-report', aiRateLimit, async (req, res) => {
   try {
     const { sample, site, visionData, attachedDiagnostics, targetPlanet, investigator } = req.body;
 
@@ -405,7 +444,7 @@ Estrutura clara em português:
     return res.json({ report: content, reasoning, model: NVIDIA_MODEL });
   } catch (error: any) {
     console.error('Erro na geração de relatório:', error);
-    return res.status(500).json({
+    return res.status(error instanceof AiNotConfiguredError ? 503 : 500).json({
       error: error.message || 'Falha ao emitir resumo com o copiloto.',
     });
   }
@@ -415,9 +454,9 @@ Estrutura clara em português:
 app.get('/api/official/catalog', (_req, res) => {
   return res.json({
     endpoints: HARDCODED_API_APIS_SAFE(),
-    aiConfigured: true,
+    aiConfigured: AI_CONFIGURED,
     aiModel: NVIDIA_MODEL,
-    aiProvider: 'NVIDIA NIM (Hardcoded)',
+    aiProvider: 'NVIDIA NIM',
     storageMode: 'local-persistent',
   });
 });
@@ -454,20 +493,38 @@ app.get('/api/official/elevation', async (req, res) => {
   }
 });
 
+// EONET can be slow or briefly unreachable; keep the last good answer for 10 minutes
+// and serve it (marked stale) when a refresh fails.
+const EONET_CACHE_TTL_MS = 10 * 60 * 1000;
+let eonetCache: { at: number; events: unknown[] } | null = null;
+
 app.get('/api/official/nasa-events', async (_req, res) => {
+  if (eonetCache && Date.now() - eonetCache.at < EONET_CACHE_TTL_MS) {
+    return res.json({ events: eonetCache.events, source: HARDCODED_OFFICIAL_APIS.NASA_EONET_V3, cached: true });
+  }
+  const staleFallback = () =>
+    res.json({
+      events: eonetCache?.events || [],
+      source: HARDCODED_OFFICIAL_APIS.NASA_EONET_V3,
+      stale: Boolean(eonetCache),
+    });
   try {
     const apiRes = await fetch(HARDCODED_OFFICIAL_APIS.NASA_EONET_V3, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(12000),
     });
     if (!apiRes.ok) {
-      return res.json({ events: [], source: HARDCODED_OFFICIAL_APIS.NASA_EONET_V3 });
+      return staleFallback();
     }
     const data: any = await apiRes.json();
-    const events = (data?.events || []).slice(0, 8).map((ev: any) => {
-      const geo = ev.geometry?.[0];
-      const coords = Array.isArray(geo?.coordinates) && geo.coordinates.length >= 2
-        ? ([Number(geo.coordinates[1]), Number(geo.coordinates[0])] as [number, number])
-        : undefined;
+    const events = (data?.events || []).slice(0, 80).map((ev: any) => {
+      // EONET lists observations chronologically; the last one is the event's current position.
+      const geo = Array.isArray(ev.geometry) ? ev.geometry[ev.geometry.length - 1] : undefined;
+      // Point → [lng, lat]; Polygon → [[[lng, lat], ...]] (use its first vertex).
+      const raw = geo?.type === 'Polygon' ? geo.coordinates?.[0]?.[0] : geo?.coordinates;
+      const coords =
+        Array.isArray(raw) && typeof raw[0] === 'number' && typeof raw[1] === 'number'
+          ? ([raw[1], raw[0]] as [number, number])
+          : undefined;
       return {
         id: ev.id,
         title: ev.title,
@@ -476,27 +533,250 @@ app.get('/api/official/nasa-events', async (_req, res) => {
         coordinates: coords,
       };
     });
+    eonetCache = { at: Date.now(), events };
     return res.json({ events, source: HARDCODED_OFFICIAL_APIS.NASA_EONET_V3 });
-  } catch {
-    return res.json({ events: [], source: HARDCODED_OFFICIAL_APIS.NASA_EONET_V3 });
+  } catch (err) {
+    console.warn('NASA EONET indisponível:', (err as any)?.cause?.code || (err as Error)?.message);
+    return staleFallback();
   }
 });
 
-// Local-First Persistent JSON Storage for Accounts, Dynamic Profiles & Studies
+// ---------------------------------------------------------------------------
+// Authentication: credentials live only on the server (scrypt), never in the
+// shared state file and never in the browser.
+// ---------------------------------------------------------------------------
+const AUTH_FILE = path.join(LOCAL_DB_DIR, 'auth.json');
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+interface StoredCredential {
+  accountId: string;
+  email: string;
+  codename: string;
+  salt: string;
+  hash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AuthStore {
+  credentials: Record<string, StoredCredential>;
+  sessions: Record<string, { accountId: string; expiresAt: number }>;
+}
+
+function readAuthStore(): AuthStore {
+  try {
+    if (fs.existsSync(AUTH_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
+      return { credentials: parsed.credentials || {}, sessions: parsed.sessions || {} };
+    }
+  } catch (err) {
+    console.warn('Não foi possível ler auth.json:', err);
+  }
+  return { credentials: {}, sessions: {} };
+}
+
+function writeAuthStore(store: AuthStore): void {
+  if (!fs.existsSync(LOCAL_DB_DIR)) fs.mkdirSync(LOCAL_DB_DIR, { recursive: true });
+  const now = Date.now();
+  for (const [token, s] of Object.entries(store.sessions)) {
+    if (s.expiresAt <= now) delete store.sessions[token];
+  }
+  fs.writeFileSync(AUTH_FILE, JSON.stringify(store, null, 2), { encoding: 'utf-8', mode: 0o600 });
+}
+
+function hashPassword(password: string, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { salt, hash };
+}
+
+function verifyPassword(password: string, cred: StoredCredential): boolean {
+  const candidate = Buffer.from(crypto.scryptSync(password, cred.salt, 64).toString('hex'), 'hex');
+  const expected = Buffer.from(cred.hash, 'hex');
+  return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+}
+
+/** Old builds stored SHA-256("african-analogs::" + password) in the shared state file. */
+function legacySha256(password: string): string {
+  return crypto.createHash('sha256').update(`african-analogs::${password}`).digest('hex');
+}
+
+function createSession(store: AuthStore, accountId: string): string {
+  const token = crypto.randomBytes(32).toString('hex');
+  store.sessions[token] = { accountId, expiresAt: Date.now() + SESSION_TTL_MS };
+  return token;
+}
+
+function sessionAccountId(req: express.Request): string | null {
+  const header = req.get('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) return null;
+  const session = readAuthStore().sessions[token];
+  return session && session.expiresAt > Date.now() ? session.accountId : null;
+}
+
+const publicAccount = (c: StoredCredential) => ({
+  id: c.accountId,
+  email: c.email,
+  codename: c.codename,
+  profileId: c.accountId,
+  createdAt: c.createdAt,
+  updatedAt: c.updatedAt,
+});
+
+const normalizeEmail = (v: unknown) => String(v ?? '').trim().toLowerCase();
+const normalizeCodenameServer = (v: unknown) => {
+  const raw = String(v ?? '').trim().toLowerCase();
+  return raw.startsWith('@') ? raw : `@${raw}`;
+};
+
+app.post('/api/auth/register', authRateLimit, (req, res) => {
+  const { id, email, codename, password } = req.body || {};
+  const cleanEmail = normalizeEmail(email);
+  const cleanCodename = normalizeCodenameServer(codename);
+  const accountId = typeof id === 'string' && /^[a-z0-9-]{4,64}$/i.test(id) ? id : `usr-${crypto.randomUUID()}`;
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return res.status(400).json({ error: 'E-mail inválido.' });
+  }
+  if (typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ error: 'A senha deve ter pelo menos 8 caracteres.' });
+  }
+
+  const store = readAuthStore();
+  const creds = Object.values(store.credentials);
+  if (creds.some((c) => c.email === cleanEmail)) {
+    return res.status(409).json({ error: 'Já existe uma conta com este e-mail.' });
+  }
+  if (creds.some((c) => c.codename === cleanCodename)) {
+    return res.status(409).json({ error: `O codinome ${cleanCodename} já está em uso.` });
+  }
+  if (store.credentials[accountId]) {
+    return res.status(409).json({ error: 'Identificador de conta já existe.' });
+  }
+
+  const now = new Date().toISOString();
+  const { salt, hash } = hashPassword(password);
+  const cred: StoredCredential = { accountId, email: cleanEmail, codename: cleanCodename, salt, hash, createdAt: now, updatedAt: now };
+  store.credentials[accountId] = cred;
+  const token = createSession(store, accountId);
+  writeAuthStore(store);
+  return res.status(201).json({ account: publicAccount(cred), token });
+});
+
+app.post('/api/auth/login', authRateLimit, (req, res) => {
+  const { identifier, password } = req.body || {};
+  if (typeof identifier !== 'string' || typeof password !== 'string' || !identifier.trim()) {
+    return res.status(400).json({ error: 'Indique e-mail/codinome e senha.' });
+  }
+  const id = identifier.trim().toLowerCase();
+  const asCodename = normalizeCodenameServer(id);
+  const store = readAuthStore();
+  let cred = Object.values(store.credentials).find((c) => c.email === id || c.codename === asCodename);
+
+  // One-time migration of accounts created by older builds (SHA-256 in the shared state file).
+  if (!cred) {
+    const legacyAccounts: any[] = Array.isArray(readLocalDb().accounts) ? readLocalDb().accounts : [];
+    const legacy = legacyAccounts.find(
+      (a) => String(a.email || '').toLowerCase() === id || String(a.codename || '').toLowerCase() === asCodename
+    );
+    if (legacy?.passwordHash && legacy.passwordHash === legacySha256(password)) {
+      const now = new Date().toISOString();
+      const { salt, hash } = hashPassword(password);
+      cred = {
+        accountId: legacy.id,
+        email: normalizeEmail(legacy.email),
+        codename: normalizeCodenameServer(legacy.codename),
+        salt,
+        hash,
+        createdAt: legacy.createdAt || now,
+        updatedAt: now,
+      };
+      store.credentials[cred.accountId] = cred;
+    }
+  }
+
+  if (!cred || !verifyPassword(password, cred)) {
+    return res.status(401).json({ error: 'E-mail/codinome ou senha incorretos.' });
+  }
+  const token = createSession(store, cred.accountId);
+  writeAuthStore(store);
+  return res.json({ account: publicAccount(cred), token });
+});
+
+app.post('/api/auth/password', authRateLimit, (req, res) => {
+  const accountId = sessionAccountId(req);
+  if (!accountId) return res.status(401).json({ error: 'Sessão expirada. Entre novamente.' });
+  const { currentPassword, newPassword } = req.body || {};
+  const store = readAuthStore();
+  const cred = store.credentials[accountId];
+  if (!cred || typeof currentPassword !== 'string' || !verifyPassword(currentPassword, cred)) {
+    return res.status(401).json({ error: 'Senha atual incorreta.' });
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ error: 'A nova senha deve ter pelo menos 8 caracteres.' });
+  }
+  const { salt, hash } = hashPassword(newPassword);
+  store.credentials[accountId] = { ...cred, salt, hash, updatedAt: new Date().toISOString() };
+  writeAuthStore(store);
+  return res.json({ ok: true });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const header = req.get('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (token) {
+    const store = readAuthStore();
+    delete store.sessions[token];
+    writeAuthStore(store);
+  }
+  return res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Shared workspace state (profiles, studies, groups). Readable by anyone,
+// writable only with a valid session. Password material is always stripped.
+// ---------------------------------------------------------------------------
+// Only public, shareable collections are stored here. Private data stays out:
+//  - accounts (e-mails) live in auth.json and are never listed;
+//  - direct messages and personal connections stay in each user's browser;
+//  - e-mail addresses are removed from public profiles.
+const STATE_KEYS = ['customProfiles', 'samples', 'studyThreads', 'networkGroups'] as const;
+
+const stripPrivateProfileFields = (profiles: unknown) =>
+  Array.isArray(profiles) ? profiles.map(({ email: _email, ...rest }: any) => rest) : profiles;
+
+function publicState(db: Record<string, any>) {
+  const out: Record<string, unknown> = { updatedAt: db.updatedAt };
+  for (const key of STATE_KEYS) {
+    if (key in db) out[key] = key === 'customProfiles' ? stripPrivateProfileFields(db[key]) : db[key];
+  }
+  return out;
+}
+
 app.get('/api/local/state', (_req, res) => {
-  return res.json(readLocalDb());
+  return res.json(publicState(readLocalDb()));
 });
 
 app.post('/api/local/state', (req, res) => {
-  if (req.body && typeof req.body === 'object') {
-    writeLocalDb(req.body);
+  if (!sessionAccountId(req)) {
+    return res.status(401).json({ error: 'Entre na sua conta para sincronizar com o servidor.' });
   }
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Formato inválido.' });
+  }
+  const patch: Record<string, unknown> = {};
+  for (const key of STATE_KEYS) {
+    if (key in req.body) patch[key] = key === 'customProfiles' ? stripPrivateProfileFields(req.body[key]) : req.body[key];
+  }
+  writeLocalDb(patch);
   return res.json({ ok: true });
 });
 
 // Production vs Development Setup
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  // `npm start` passes --production (works on Windows too, unlike NODE_ENV=... prefixes).
+  const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
+  if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       plugins: [

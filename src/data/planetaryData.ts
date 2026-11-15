@@ -1,73 +1,97 @@
 import { AnalogueSite, CollaboratorProfile, DirectResearchMessage, GeologicalSample } from '../types';
-import avatarCavalazzi from '../assets/images/researcher_belilla_cavalazzi_1794529441256.jpg';
-import avatarReimold from '../assets/images/researcher_uwe_reimold_1794529441147.jpg';
-import avatarJuma from '../assets/images/researcher_amina_juma_1794529442391.jpg';
-import avatarVargas from '../assets/images/researcher_camila_vargas_1794529442846.jpg';
-import avatarMensah from '../assets/images/researcher_kwame_mensah_1794529442342.jpg';
+import { generateDynamicAvatarSvg } from '../services/localAccountStore';
+import { computeAnalogueFidelity } from '../services/analogueFidelity';
+import { computeSampleFingerprint } from '../services/fingerprint';
+
+/**
+ * Demonstration profiles. They are fictional on purpose: earlier versions used real
+ * researchers' names with invented bios, photos and endorsements.
+ */
+const DEMO_NAMES: Record<string, string> = {
+  'col-cavalazzi': 'Demo · Astrobiologia de Dallol',
+  'col-reimold': 'Demo · Geologia de Impacto',
+  'col-juma': 'Demo · Geoquímica do Rift',
+  'col-vargas': 'Demo · Hiperaridez e Espectroscopia',
+  'col-mensah': 'Demo · Geomorfologia Eólica',
+};
+
+/** Names used by older builds, so data already saved in browsers can be relabelled. */
+export const LEGACY_NAME_REPLACEMENTS: Record<string, string> = {
+  'Dra. Belilla Cavalazzi': 'Demo · Astrobiologia de Dallol',
+  'Prof. Uwe Reimold': 'Demo · Geologia de Impacto',
+  'Dra. Amina Juma': 'Demo · Geoquímica do Rift',
+  'Dra. Camila Vargas': 'Demo · Hiperaridez e Espectroscopia',
+  'Dr. Kwame Mensah': 'Demo · Geomorfologia Eólica',
+  'Dr. Felipe Gómez': 'Revisor Demo A',
+  'Dr. Clive Neal': 'Revisor Demo B',
+  'Dr. Christopher Glein': 'Revisor Demo C',
+  'Dr. Christopher McKay': 'Revisor Demo D',
+  'Dr. Ralph Lorenz': 'Revisor Demo E'
+};
 
 export const COLLABORATORS: CollaboratorProfile[] = [
   {
     id: 'col-cavalazzi',
-    name: 'Dra. Belilla Cavalazzi',
-    codename: '@dallol-extremophile',
-    avatarUrl: avatarCavalazzi,
-    role: 'Astrobióloga Principal',
-    institution: 'Università di Bologna / Europlanet',
-    country: 'Itália / Etiópia',
+    name: 'Demo · Astrobiologia de Dallol',
+    codename: '@demo-dallol',
+    avatarUrl: generateDynamicAvatarSvg(DEMO_NAMES['col-cavalazzi'].replace('Demo · ', '')),
+    role: 'Perfil de demonstração',
+    institution: 'Perfil de demonstração (fictício)',
+    country: 'Etiópia',
     specialty: 'Evaporitos hiperácidos, salmouras caotrópicas e limites físico-químicos da vida',
-    bio: 'Coordena expedições abertas na Depressão de Danakil e Dallol para calibração de assinaturas Raman e validação de controles negativos para Marte Noachiano.',
+    bio: 'Perfil fictício de demonstração — não representa nenhuma pessoa real. Tema: Evaporitos hiperácidos e salmouras de Dallol como análogos de Marte e Vénus.',
     focusPlanets: ['Mars', 'Venus'],
     openToContributions: true,
   },
   {
     id: 'col-reimold',
-    name: 'Prof. Uwe Reimold',
-    codename: '@vredefort-shock',
-    avatarUrl: avatarReimold,
-    role: 'Geólogo de Impactos Planetários',
-    institution: 'Council for Geoscience SA / UnB',
-    country: 'África do Sul / Brasil',
+    name: 'Demo · Geologia de Impacto',
+    codename: '@demo-vredefort',
+    avatarUrl: generateDynamicAvatarSvg(DEMO_NAMES['col-reimold'].replace('Demo · ', '')),
+    role: 'Perfil de demonstração',
+    institution: 'Perfil de demonstração (fictício)',
+    country: 'África do Sul',
     specialty: 'Metamorfismo de choque, brechas de fusão e estruturas multi-anéis',
-    bio: 'Lidera o repositório aberto de amostras do Domo de Vredefort, comparando feições de deformação planar (PDFs) com regolitos lunares das missões Apollo e Artemis.',
+    bio: 'Perfil fictício de demonstração — não representa nenhuma pessoa real. Tema: Metamorfismo de choque em Vredefort como análogo de regolito lunar.',
     focusPlanets: ['Moon', 'Mars'],
     openToContributions: true,
   },
   {
     id: 'col-juma',
-    name: 'Dra. Amina Juma',
-    codename: '@natron-alkali',
-    avatarUrl: avatarJuma,
-    role: 'Geoquímica do Rift Leste-Africano',
-    institution: 'University of Dar es Salaam',
+    name: 'Demo · Geoquímica do Rift',
+    codename: '@demo-natron',
+    avatarUrl: generateDynamicAvatarSvg(DEMO_NAMES['col-juma'].replace('Demo · ', '')),
+    role: 'Perfil de demonstração',
+    institution: 'Perfil de demonstração (fictício)',
     country: 'Tanzânia',
     specialty: 'Lagos soda-alcalinos, carbonatitos e plumas oceânicas de Encélado',
-    bio: 'Investiga equilíbrios de trona, natrão e bioassinaturas haloalcalifílicas no Lago Natron como referência direta para os oceanos subsuperficiais de Encélado.',
+    bio: 'Perfil fictício de demonstração — não representa nenhuma pessoa real. Tema: Lagos soda-alcalinos (Natron) como análogos do oceano de Encélado.',
     focusPlanets: ['Enceladus', 'Mars'],
     openToContributions: true,
   },
   {
     id: 'col-vargas',
-    name: 'Dra. Camila Vargas',
-    codename: '@halite-atacama',
-    avatarUrl: avatarVargas,
-    role: 'Especialista em Hiperaridez & Espectroscopia',
-    institution: 'Centro de Astrobiología / NASA Ames',
+    name: 'Demo · Hiperaridez e Espectroscopia',
+    codename: '@demo-atacama',
+    avatarUrl: generateDynamicAvatarSvg(DEMO_NAMES['col-vargas'].replace('Demo · ', '')),
+    role: 'Perfil de demonstração',
+    institution: 'Perfil de demonstração (fictício)',
     country: 'Chile',
     specialty: 'Percloratos naturais, biofilmes endolíticos e espectrometria SWIR',
-    bio: 'Mantém séries abertas do Salar de Pajonales e Yungay para comparação cruzada com desertos hiperáridos africanos e dados orbitais CRISM/MRO.',
+    bio: 'Perfil fictício de demonstração — não representa nenhuma pessoa real. Tema: Hiperaridez, percloratos e espectroscopia SWIR no Atacama.',
     focusPlanets: ['Mars', 'Europa'],
     openToContributions: true,
   },
   {
     id: 'col-mensah',
-    name: 'Dr. Kwame Mensah',
-    codename: '@namib-aeolian',
-    avatarUrl: avatarMensah,
-    role: 'Geomorfólogo Planetário',
-    institution: 'Namib Research Collaborative / NASA Aeolian Lab',
+    name: 'Demo · Geomorfologia Eólica',
+    codename: '@demo-namibe',
+    avatarUrl: generateDynamicAvatarSvg(DEMO_NAMES['col-mensah'].replace('Demo · ', '')),
+    role: 'Perfil de demonstração',
+    institution: 'Perfil de demonstração (fictício)',
     country: 'Namíbia',
     specialty: 'Dunas lineares gigantes, dinâmica eólica e espectros de óxidos férricos',
-    bio: 'Analisa campos de dunas do Namibe e anéis concêntricos de Richat para modelagem orbital de Titã (Dragonfly) e transporte de areia em Marte.',
+    bio: 'Perfil fictício de demonstração — não representa nenhuma pessoa real. Tema: Dunas lineares do Namibe como análogos das dunas de Titã e Marte.',
     focusPlanets: ['Titan', 'Mars'],
     openToContributions: true,
   },
@@ -98,7 +122,11 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['Espectrômetro Raman Portátil', 'XRF Mineralógico', 'Sondas Térmicas de Baixo pH'],
     scientificPapersCount: 312,
-    dataSource: 'NASA SRTM DEM · ESA Europlanet Analogue Catalogue',
+    dataSource: 'Literatura científica (Cavalazzi B. et al. 2019) · altitude SRTM',
+    references: [
+      { citation: 'Cavalazzi B. et al. (2019). The Dallol Geothermal Area, Northern Afar (Ethiopia) — An Exceptional Planetary Field Analog on Earth. Astrobiology.', doi: '10.1089/ast.2018.1926', url: 'https://doi.org/10.1089/ast.2018.1926' },
+      { citation: 'Kotopoulou E. et al. (2018). A Polyextreme Hydrothermal System Controlled by Iron: The Case of Dallol at the Afar Triangle. ACS Earth and Space Chemistry.', doi: '10.1021/acsearthspacechem.8b00141', url: 'https://doi.org/10.1021/acsearthspacechem.8b00141' },
+    ],
     radarAxes: {
       mineralogy: 95,
       geomorphology: 91,
@@ -141,7 +169,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['Landsat 8/9 OLI Calibration', 'ASTER Thermal Infrared', 'ISS Crew Earth Observations'],
     scientificPapersCount: 194,
-    dataSource: 'NASA Earth Observatory · USGS Landsat 9 Archive',
+    dataSource: 'Literatura científica (Matton G. et al. 2005) · altitude SRTM',
+    references: [
+      { citation: 'Matton G. et al. (2005). Resolving the Richat enigma: Doming and hydrothermal karstification above an alkaline complex. Geology.', doi: '10.1130/G21542AR.1', url: 'https://doi.org/10.1130/G21542AR.1' },
+    ],
     radarAxes: {
       mineralogy: 90,
       geomorphology: 97,
@@ -184,7 +215,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['Cassini Radar Morphological Calibration', 'HiRISE Aeolian Ripple Study'],
     scientificPapersCount: 276,
-    dataSource: 'NASA PDS Planetary Aeolian Lab · SRTM 30m DEM',
+    dataSource: 'Literatura científica (Lorenz R. D. et al. 2006) · altitude SRTM',
+    references: [
+      { citation: 'Lorenz R. D. et al. (2006). The Sand Seas of Titan: Cassini RADAR Observations of Longitudinal Dunes. Science.', doi: '10.1126/science.1123257', url: 'https://doi.org/10.1126/science.1123257' },
+    ],
     radarAxes: {
       mineralogy: 89,
       geomorphology: 99,
@@ -227,7 +261,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['LROC Impact Melt Mapping', 'Lunar Sample Return Breccia Benchmarking'],
     scientificPapersCount: 418,
-    dataSource: 'NASA Earth Impact Database · Council for Geoscience SA',
+    dataSource: 'Literatura científica (Reimold W. U. & Gibson R. L. 1996) · altitude SRTM',
+    references: [
+      { citation: 'Reimold W. U. & Gibson R. L. (1996). Geology and evolution of the Vredefort impact structure, South Africa. Journal of African Earth Sciences.', doi: '10.1016/S0899-5362(96)00059-0', url: 'https://doi.org/10.1016/S0899-5362(96)00059-0' },
+    ],
     radarAxes: {
       mineralogy: 96,
       geomorphology: 98,
@@ -269,7 +306,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['Cassini INMS Analogue Brine Calibration', 'SHERLOC Raman Carbonate Detection'],
     scientificPapersCount: 235,
-    dataSource: 'NASA Astrobiology Carbonate Lake Archive · SRTM DEM',
+    dataSource: 'Literatura científica (Glein C. R. et al. 2015) · altitude SRTM',
+    references: [
+      { citation: 'Glein C. R. et al. (2015). The pH of Enceladus\' ocean. Geochimica et Cosmochimica Acta.', doi: '10.1016/j.gca.2015.04.017', url: 'https://doi.org/10.1016/j.gca.2015.04.017' },
+    ],
     radarAxes: {
       mineralogy: 93,
       geomorphology: 89,
@@ -310,7 +350,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['SuperCam LIBS', 'PIXL XRF', 'SHERLOC UV Raman'],
     scientificPapersCount: 420,
-    dataSource: 'NASA Ames Atacama Field Archive · PDS',
+    dataSource: 'Literatura científica (Navarro-González R. et al. 2003) · altitude SRTM',
+    references: [
+      { citation: 'Navarro-González R. et al. (2003). Mars-Like Soils in the Atacama Desert, Chile, and the Dry Limit of Microbial Life. Science.', doi: '10.1126/science.1089143', url: 'https://doi.org/10.1126/science.1089143' },
+    ],
     radarAxes: {
       mineralogy: 95,
       geomorphology: 92,
@@ -352,7 +395,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['LROC Ground-Truth', 'Portable Planetary XRF', 'LiDAR 3D'],
     scientificPapersCount: 280,
-    dataSource: 'ESA PANGAEA · NASA Artemis Analogue Database',
+    dataSource: 'Literatura científica (Sauro F. et al. 2020) · altitude SRTM',
+    references: [
+      { citation: 'Sauro F. et al. (2020). Lava tubes on Earth, Moon and Mars: A review on their size and morphology revealed by comparative planetology. Earth-Science Reviews.', doi: '10.1016/j.earscirev.2020.103288', url: 'https://doi.org/10.1016/j.earscirev.2020.103288' },
+    ],
     radarAxes: {
       mineralogy: 93,
       geomorphology: 96,
@@ -393,7 +439,10 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
     ],
     nasaInstrumentsTested: ['Europa Clipper MISE Testbed', 'Cryo-Drill Probe'],
     scientificPapersCount: 165,
-    dataSource: 'NASA JPL Europa Clipper Analogue Archive',
+    dataSource: 'Literatura científica (Gleeson D. F. et al. 2012) · altitude SRTM',
+    references: [
+      { citation: 'Gleeson D. F. et al. (2012). Biosignature Detection at an Arctic Analog to Europa. Astrobiology.', doi: '10.1089/ast.2010.0579', url: 'https://doi.org/10.1089/ast.2010.0579' },
+    ],
     radarAxes: {
       mineralogy: 96,
       geomorphology: 94,
@@ -412,14 +461,14 @@ export const ANALOGUE_SITES: AnalogueSite[] = [
   }
 ];
 
-export const INITIAL_SAMPLES: GeologicalSample[] = [
+const RAW_INITIAL_SAMPLES: Omit<GeologicalSample, 'hash'>[] = [
   {
     id: 'smp-dnk-01',
     name: 'DNK-DAL-01: Crosta Sulfatada Hiperácida de Dallol',
     siteId: 'danakil',
     collaboratorId: 'col-cavalazzi',
-    collectorName: 'Dra. Belilla Cavalazzi',
-    institution: 'Università di Bologna / Europlanet Consortium',
+    collectorName: 'Demo · Astrobiologia de Dallol',
+    institution: 'Perfil de demonstração (fictício)',
     collectedAt: '2026-03-22',
     coordinates: [14.2417, 40.2983],
     depthCm: 2.5,
@@ -462,16 +511,15 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     ],
     fieldNotes: 'Amostra coletada em terraço hidrotermal ativo no domo de Dallol. Baixíssima atividade de água (aw 0.24) combinada com pH extremo e sais caotrópicos inibe proliferação celular.',
     version: 'v1.4.0-pds',
-    hash: '0x9a21f4e8c7b3015d',
-    status: 'verified_peer_reviewed',
-    officialSource: 'Europlanet / NASA Astrobiology Open Dataset',
+    status: 'under_review',
+    officialSource: 'Dados de demonstração (fictícios)',
     peerComments: [
       {
         id: 'c-dnk-01',
         sampleId: 'smp-dnk-01',
-        author: 'Dr. Felipe Gómez',
+        author: 'Revisor Demo A',
         role: 'Investigador Principal',
-        institution: 'Centro de Astrobiología (CAB, Madrid)',
+        institution: 'Perfil de demonstração (fictício)',
         timestamp: '2026-04-02 11:15 UTC',
         content: 'Confirmação de ausência de biomarcadores ativos nos domos hipersalinos de MgCl2; excelente controle negativo para validação de detecção de vida em Marte.',
         statusChange: 'approved'
@@ -483,8 +531,8 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     name: 'VRD-IMP-04: Pseudotaquilito & Quartzo Chocado de Vredefort',
     siteId: 'vredefort',
     collaboratorId: 'col-reimold',
-    collectorName: 'Prof. Uwe Reimold',
-    institution: 'University of Brasília / Council for Geoscience SA',
+    collectorName: 'Demo · Geologia de Impacto',
+    institution: 'Perfil de demonstração (fictício)',
     collectedAt: '2026-02-11',
     coordinates: [-27.014, 27.492],
     depthCm: 10.0,
@@ -525,16 +573,15 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     ],
     fieldNotes: 'Veio de pseudotaquilito cortando gnaisse arqueano no anel interno da estrutura de Vredefort. Microestrutura de choque equivalente às brechas lunares das missões Apollo.',
     version: 'v1.2.0-pds',
-    hash: '0x4c82d1a09f347e2b',
-    status: 'verified_peer_reviewed',
-    officialSource: 'NASA Earth Impact Database · Council for Geoscience',
+    status: 'under_review',
+    officialSource: 'Dados de demonstração (fictícios)',
     peerComments: [
       {
         id: 'c-vrd-01',
         sampleId: 'smp-vrd-02',
-        author: 'Dr. Clive Neal',
+        author: 'Revisor Demo B',
         role: 'Cientista Lunar',
-        institution: 'University of Notre Dame / NASA LEAG',
+        institution: 'Perfil de demonstração (fictício)',
         timestamp: '2026-02-19 16:40 UTC',
         content: 'Textura de vidro de impacto calibrada contra amostras de Fra Mauro (Apollo 14). Referência sólida para treinamento geológico Artemis.',
         statusChange: 'approved'
@@ -546,8 +593,8 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     name: 'NAT-RIF-07: Evaporito Alcalino de Trona & Carbonatito',
     siteId: 'natron',
     collaboratorId: 'col-juma',
-    collectorName: 'Dra. Amina Juma',
-    institution: 'University of Dar es Salaam / East African Rift Project',
+    collectorName: 'Demo · Geoquímica do Rift',
+    institution: 'Perfil de demonstração (fictício)',
     collectedAt: '2026-04-18',
     coordinates: [-2.418, 36.012],
     depthCm: 3.0,
@@ -588,16 +635,15 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     ],
     fieldNotes: 'Crosta carbonatada precipitada na margem sul do Lago Natron com efluente do Ol Doinyo Lengai. pH 10.5 replica a alcalinidade do oceano de Encélado.',
     version: 'v1.1.0-pds',
-    hash: '0x7e39b51c820a6d4f',
-    status: 'verified_peer_reviewed',
-    officialSource: 'East African Rift Astrobiology Repository · NASA PDS',
+    status: 'under_review',
+    officialSource: 'Dados de demonstração (fictícios)',
     peerComments: [
       {
         id: 'c-nat-01',
         sampleId: 'smp-nat-03',
-        author: 'Dr. Christopher Glein',
+        author: 'Revisor Demo C',
         role: 'Geoquímico Planetário',
-        institution: 'Southwest Research Institute (SwRI)',
+        institution: 'Perfil de demonstração (fictício)',
         timestamp: '2026-04-25 14:20 UTC',
         content: 'Razão carbonato/bicarbonato alinhada aos modelos termodinâmicos da pluma medida pela sonda Cassini.',
         statusChange: 'approved'
@@ -609,8 +655,8 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     name: 'ATACAMA-PAL-04: Nódulo Evaporítico com Percloratos',
     siteId: 'atacama',
     collaboratorId: 'col-vargas',
-    collectorName: 'Dra. Camila Vargas',
-    institution: 'NASA Astrobiology Institute / Centro de Astrobiología',
+    collectorName: 'Demo · Hiperaridez e Espectroscopia',
+    institution: 'Perfil de demonstração (fictício)',
     collectedAt: '2026-03-14',
     coordinates: [-24.092, -69.869],
     depthCm: 4.5,
@@ -656,16 +702,15 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     ],
     fieldNotes: 'Coletada no interior da crosta salina a 4.5 cm. Detecção de cianobactérias Chroococcidiopsis adaptadas a dessecação extrema.',
     version: 'v1.2.0-pds',
-    hash: '0x8f4c2e1794b15d9a',
-    status: 'verified_peer_reviewed',
-    officialSource: 'NASA PDS Geosciences Node · Atacama Field Dataset',
+    status: 'under_review',
+    officialSource: 'Dados de demonstração (fictícios)',
     peerComments: [
       {
         id: 'c-atc-01',
         sampleId: 'smp-atc-04',
-        author: 'Dr. Christopher McKay',
+        author: 'Revisor Demo D',
         role: 'Investigador Principal',
-        institution: 'NASA Ames Research Center',
+        institution: 'Perfil de demonstração (fictício)',
         timestamp: '2026-03-20 14:10 UTC',
         content: 'Retenção de água higroscópica pela halita a aw 0.27 valida modelos de salmouras transientes em Marte.',
         statusChange: 'approved'
@@ -677,8 +722,8 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     name: 'NAM-DUN-09: Areia Hematítica de Dunas Lineares do Namibe',
     siteId: 'namib',
     collaboratorId: 'col-mensah',
-    collectorName: 'Dr. Kwame Mensah',
-    institution: 'Namib Research Collaborative / NASA Aeolian Lab',
+    collectorName: 'Demo · Geomorfologia Eólica',
+    institution: 'Perfil de demonstração (fictício)',
     collectedAt: '2026-04-28',
     coordinates: [-24.752, 15.284],
     depthCm: 1.5,
@@ -720,16 +765,15 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     ],
     fieldNotes: 'Amostra superficial coletada na crista de duna linear no Namibe para calibração de retroespalhamento de radar Cassini e seleção de sítios Dragonfly em Titã.',
     version: 'v1.0.0-pds',
-    hash: '0x3b18d77f92c14e0a',
     status: 'under_review',
-    officialSource: 'NASA PDS Planetary Aeolian Lab · SRTM 30m DEM',
+    officialSource: 'Dados de demonstração (fictícios)',
     peerComments: [
       {
         id: 'c-nam-01',
         sampleId: 'smp-nam-05',
-        author: 'Dr. Ralph Lorenz',
+        author: 'Revisor Demo E',
         role: 'Cientista Planetário',
-        institution: 'Johns Hopkins APL (Dragonfly Team)',
+        institution: 'Perfil de demonstração (fictício)',
         timestamp: '2026-05-03 09:30 UTC',
         content: 'Espaçamento inter-dunar e granulometria consistentes com os campos eólicos equatoriais de Shangri-La em Titã.',
         statusChange: 'approved'
@@ -741,8 +785,8 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     name: 'DNK-VEN-02: Basalto Hidrotermal Ácido do Triângulo de Afar',
     siteId: 'danakil',
     collaboratorId: 'col-cavalazzi',
-    collectorName: 'Dra. Belilla Cavalazzi',
-    institution: 'Università di Bologna / Europlanet Consortium',
+    collectorName: 'Demo · Astrobiologia de Dallol',
+    institution: 'Perfil de demonstração (fictício)',
     collectedAt: '2026-05-01',
     coordinates: [14.239, 40.301],
     depthCm: 6.0,
@@ -782,12 +826,25 @@ export const INITIAL_SAMPLES: GeologicalSample[] = [
     ],
     fieldNotes: 'Crosta basáltica exposta a fumarolas ácidas secas — estudo aberto para calibração de emissividade térmica das missões VERITAS e DAVINCI.',
     version: 'v1.0.2-pds',
-    hash: '0x6f91a20e5d4c11b3',
     status: 'under_review',
-    officialSource: 'Europlanet Afar Volcanology Archive · NASA SRTM',
+    officialSource: 'Dados de demonstração (fictícios)',
     peerComments: []
   }
 ];
+
+/**
+ * Demo samples with scores and fingerprints computed by the same code the app uses for
+ * user data, instead of hand-typed numbers.
+ */
+export const INITIAL_SAMPLES: GeologicalSample[] = RAW_INITIAL_SAMPLES.map((sample) => {
+  const site = ANALOGUE_SITES.find((s) => s.id === sample.siteId) || null;
+  const withScores: GeologicalSample = {
+    hash: '',
+    ...sample,
+    fidelityScores: computeAnalogueFidelity(sample, sample.targetPlanet, site),
+  };
+  return { ...withScores, hash: computeSampleFingerprint(withScores) };
+});
 
 export const INITIAL_COLLABORATOR_THREADS: Record<string, DirectResearchMessage[]> = {
   'col-cavalazzi': [
@@ -795,7 +852,7 @@ export const INITIAL_COLLABORATOR_THREADS: Record<string, DirectResearchMessage[
       id: 'msg-cav-1',
       collaboratorId: 'col-cavalazzi',
       sender: 'researcher',
-      senderName: 'Dra. Belilla Cavalazzi',
+      senderName: 'Demo · Astrobiologia de Dallol',
       timestamp: 'Hoje · 09:40 UTC',
       content:
         'Disponibilizamos os novos espectros XRD dos terraços de Dallol (DNK-DAL-01 e DNK-VEN-02). Se sua equipe estiver cruzando dados de jarosita ou basalto alterado em Marte/Vênus, envie seus parâmetros aqui para compararmos.',
@@ -806,7 +863,7 @@ export const INITIAL_COLLABORATOR_THREADS: Record<string, DirectResearchMessage[
       id: 'msg-rei-1',
       collaboratorId: 'col-reimold',
       sender: 'researcher',
-      senderName: 'Prof. Uwe Reimold',
+      senderName: 'Demo · Geologia de Impacto',
       timestamp: 'Ontem · 16:15 UTC',
       content:
         'Estamos validando lâminas de pseudotaquilito de Vredefort contra brechas Apollo 14. Conecte-se se precisar de correlação de metamorfismo de choque.',
@@ -817,7 +874,7 @@ export const INITIAL_COLLABORATOR_THREADS: Record<string, DirectResearchMessage[
       id: 'msg-jum-1',
       collaboratorId: 'col-juma',
       sender: 'researcher',
-      senderName: 'Dra. Amina Juma',
+      senderName: 'Demo · Geoquímica do Rift',
       timestamp: 'Ontem · 11:20 UTC',
       content:
         'As séries sazonais do Lago Natron em pH 10.5 estão abertas para modelagem das plumas de Encélado. Fico à disposição para discutir protocolos de coleta.',
@@ -828,7 +885,7 @@ export const INITIAL_COLLABORATOR_THREADS: Record<string, DirectResearchMessage[
       id: 'msg-var-1',
       collaboratorId: 'col-vargas',
       sender: 'researcher',
-      senderName: 'Dra. Camila Vargas',
+      senderName: 'Demo · Hiperaridez e Espectroscopia',
       timestamp: '2 dias atrás',
       content:
         'Compartilhei o conjunto ATACAMA-PAL-04 com dados de perclorato de magnésio e atividade de água aw 0.27 para comparação com desertos africanos.',
@@ -839,7 +896,7 @@ export const INITIAL_COLLABORATOR_THREADS: Record<string, DirectResearchMessage[
       id: 'msg-men-1',
       collaboratorId: 'col-mensah',
       sender: 'researcher',
-      senderName: 'Dr. Kwame Mensah',
+      senderName: 'Demo · Geomorfologia Eólica',
       timestamp: 'Hoje · 08:10 UTC',
       content:
         'Os perfis granulométricos das dunas lineares do Namibe estão prontos para calibração de retroespalhamento de Titã (Dragonfly) e Marte.',

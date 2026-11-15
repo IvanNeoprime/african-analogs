@@ -113,210 +113,222 @@ export function generateSpectralReflectanceCurve(
   });
 }
 
-// Compute Planetary Analogue Fidelity Index (AFI)
-export function computeAnalogueFidelity(
-  sample: Partial<GeologicalSample>,
-  targetPlanet: PlanetaryTarget
-): {
-  mineralogy: number;
-  geomorphology: number;
-  geochemistry: number;
-  radiation: number;
-  thermal: number;
-  total: number;
-} {
-  let minScore = 80;
-  let geoScore = 85;
-  let chemScore = 82;
-  let radScore = 75;
-  let thermScore = 78;
+// The Analogue Fidelity Index lives in its own module (documented there).
+export { computeAnalogueFidelity } from './analogueFidelity';
 
-  const minerals = sample.minerals || {};
-  const mineralKeys = Object.keys(minerals).map((k) => k.toLowerCase());
+/** RFC 4180-style CSV parser: quoted fields, escaped quotes ("") and commas/newlines inside quotes. */
+export function parseCsv(text: string, delimiter = ','): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  const src = text.replace(/^﻿/, '');
 
-  if (targetPlanet === 'Mars' || targetPlanet === 'Both') {
-    if (mineralKeys.some((k) => k.includes('perclorat') || k.includes('clorat'))) minScore += 8;
-    if (mineralKeys.some((k) => k.includes('gesso') || k.includes('anidrit') || k.includes('sulfat'))) minScore += 6;
-    if (mineralKeys.some((k) => k.includes('hematit') || k.includes('jarosit') || k.includes('ferro'))) minScore += 5;
-    if (mineralKeys.some((k) => k.includes('argil') || k.includes('esmectit'))) minScore += 4;
-
-    if (sample.waterActivity !== undefined) {
-      if (sample.waterActivity < 0.35) chemScore += 10;
-      else if (sample.waterActivity < 0.6) chemScore += 4;
-      else chemScore -= 8;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === delimiter) {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && src[i + 1] === '\n') i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += ch;
     }
-    if (sample.pH !== undefined && (sample.pH < 3.5 || sample.pH > 9.0)) chemScore += 6;
-  } else if (targetPlanet === 'Moon' || targetPlanet === 'Mercury' || targetPlanet === 'Phobos' || targetPlanet === 'Deimos') {
-    if (mineralKeys.some((k) => k.includes('plagiocl') || k.includes('anortosit') || k.includes('silicat'))) minScore += 9;
-    if (mineralKeys.some((k) => k.includes('pirox') || k.includes('augita') || k.includes('basalt') || k.includes('olivin'))) minScore += 6;
-    if (mineralKeys.some((k) => k.includes('ilmenit') || k.includes('carbon'))) minScore += 6;
-    if (sample.porosityPercent && sample.porosityPercent > 20) geoScore += 5;
-    if (targetPlanet === 'Mercury') thermScore += 10;
-    if (targetPlanet === 'Phobos' || targetPlanet === 'Deimos') radScore += 6;
-  } else if (targetPlanet === 'Io' || targetPlanet === 'Venus') {
-    if (mineralKeys.some((k) => k.includes('basalt') || k.includes('enxofre') || k.includes('sulf') || k.includes('cloro'))) minScore += 10;
-    if (sample.pH !== undefined && sample.pH < 3.5) chemScore += 10;
-    thermScore += 14;
-    if (targetPlanet === 'Io') radScore += 8;
-  } else if (
-    targetPlanet === 'Europa' ||
-    targetPlanet === 'Ganymede' ||
-    targetPlanet === 'Callisto' ||
-    targetPlanet === 'Mimas' ||
-    targetPlanet === 'Tethys' ||
-    targetPlanet === 'Dione' ||
-    targetPlanet === 'Rhea' ||
-    targetPlanet === 'Iapetus' ||
-    targetPlanet === 'Miranda' ||
-    targetPlanet === 'Ariel' ||
-    targetPlanet === 'Umbriel' ||
-    targetPlanet === 'Titania' ||
-    targetPlanet === 'Oberon' ||
-    targetPlanet === 'Triton' ||
-    targetPlanet === 'Pluto' ||
-    targetPlanet === 'Charon'
-  ) {
-    if (mineralKeys.some((k) => k.includes('gelo') || k.includes('sulfat') || k.includes('enxofre') || k.includes('sal') || k.includes('halit'))) {
-      minScore += 10;
-    }
-    if (mineralKeys.some((k) => k.includes('gesso') || k.includes('mirabilit') || k.includes('carbon') || k.includes('tolin'))) {
-      minScore += 6;
-    }
-    thermScore += 12;
-    radScore += 8;
-  } else if (targetPlanet === 'Enceladus' || targetPlanet === 'Ceres') {
-    if (mineralKeys.some((k) => k.includes('brucit') || k.includes('serpentin') || k.includes('calcit') || k.includes('carbonat') || k.includes('trona') || k.includes('argil'))) {
-      minScore += 10;
-    }
-    if (sample.pH !== undefined && sample.pH >= 8.5) chemScore += 12;
-    geoScore += 6;
-  } else if (targetPlanet === 'Titan' || targetPlanet === 'Jupiter' || targetPlanet === 'Saturn' || targetPlanet === 'Uranus' || targetPlanet === 'Neptune') {
-    if (mineralKeys.some((k) => k.includes('organ') || k.includes('betume') || k.includes('hidrocarbon') || k.includes('metan') || k.includes('areia') || k.includes('quartzo'))) {
-      minScore += 10;
-    }
-    if (sample.waterActivity !== undefined && sample.waterActivity < 0.25) chemScore += 10;
-    geoScore += 8;
-  } else if (targetPlanet === 'Earth') {
-    geoScore += 8;
-    chemScore += 6;
   }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.map((r) => r.map((c) => c.trim())).filter((r) => r.some((c) => c.length > 0));
+}
 
-  // Cap all scores between 40 and 99
-  const cap = (v: number) => Math.min(99, Math.max(45, Math.round(v)));
-  const finalMin = cap(minScore);
-  const finalGeo = cap(geoScore);
-  const finalChem = cap(chemScore);
-  const finalRad = cap(radScore);
-  const finalTherm = cap(thermScore);
+/** "Hematita: 30; Gesso: 20" or "Hematita=30|Gesso=20" → { Hematita: 30, Gesso: 20 } */
+export function parseCompositionList(raw: string | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw) return out;
+  for (const part of raw.split(/[;|]+/)) {
+    const m = part.match(/^\s*(.+?)\s*[:=]\s*(-?\d+(?:[.,]\d+)?)\s*%?\s*$/);
+    if (m) out[m[1]] = parseFloat(m[2].replace(',', '.'));
+  }
+  return out;
+}
 
-  const total = parseFloat(((finalMin * 0.35 + finalGeo * 0.20 + finalChem * 0.20 + finalRad * 0.15 + finalTherm * 0.10)).toFixed(1));
+const OXIDE_COLUMNS = ['sio2', 'tio2', 'al2o3', 'fe2o3', 'feo', 'mno', 'mgo', 'cao', 'na2o', 'k2o', 'p2o5', 'so3', 'cl'];
+const OXIDE_LABEL: Record<string, string> = {
+  sio2: 'SiO2', tio2: 'TiO2', al2o3: 'Al2O3', fe2o3: 'Fe2O3', feo: 'FeO', mno: 'MnO', mgo: 'MgO',
+  cao: 'CaO', na2o: 'Na2O', k2o: 'K2O', p2o5: 'P2O5', so3: 'SO3', cl: 'Cl',
+};
+
+const toNumber = (v: unknown): number | undefined => {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : undefined;
+};
+
+export interface ParsedSampleRow extends Partial<GeologicalSample> {
+  /** Fields the file did not provide. The caller decides how to fill them; the AFI ignores them. */
+  unmeasured: NonNullable<GeologicalSample['unmeasured']>;
+}
+
+function buildRow(get: (...keys: string[]) => string | undefined, rawMinerals: Record<string, number>, rawXrf: Record<string, number>, index: number, filename: string): ParsedSampleRow {
+  const unmeasured: ParsedSampleRow['unmeasured'] = [];
+  const lat = toNumber(get('lat', 'latitude'));
+  const lng = toNumber(get('lng', 'lon', 'long', 'longitude'));
+  const aw = toNumber(get('aw', 'water_activity', 'atividade_agua'));
+  const ph = toNumber(get('ph'));
+  const depth = toNumber(get('depth', 'depth_cm', 'profundidade'));
+  const porosity = toNumber(get('porosity', 'porosidade', 'porosity_percent'));
+
+  const validLatLng = lat !== undefined && lng !== undefined && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+  if (!validLatLng) unmeasured.push('coordinates');
+  if (aw === undefined || aw < 0 || aw > 1) unmeasured.push('waterActivity');
+  if (ph === undefined || ph < 0 || ph > 14) unmeasured.push('pH');
+  if (depth === undefined) unmeasured.push('depthCm');
+  if (porosity === undefined) unmeasured.push('porosityPercent');
+  if (Object.keys(rawMinerals).length === 0) unmeasured.push('minerals');
+  if (Object.keys(rawXrf).length === 0) unmeasured.push('xrfComposition');
 
   return {
-    mineralogy: finalMin,
-    geomorphology: finalGeo,
-    geochemistry: finalChem,
-    radiation: finalRad,
-    thermal: finalTherm,
-    total,
+    name: get('name', 'nome', 'amostra') || `Amostra importada #${index}`,
+    siteId: get('siteid', 'site_id', 'sitio'),
+    collectorName: get('collector', 'collectorname', 'coletor'),
+    institution: get('institution', 'instituicao', 'instituição'),
+    collectedAt: get('date', 'data', 'collectedat'),
+    coordinates: validLatLng ? [lat!, lng!] : undefined,
+    depthCm: depth,
+    rockClassification: get('classification', 'classificacao', 'classificação', 'rockclassification'),
+    targetPlanet: resolveCsvTargetPlanet(get('target', 'planeta', 'astro', 'targetplanet')),
+    waterActivity: unmeasured.includes('waterActivity') ? undefined : aw,
+    pH: unmeasured.includes('pH') ? undefined : ph,
+    porosityPercent: porosity,
+    minerals: rawMinerals,
+    xrfComposition: rawXrf,
+    fieldNotes: get('notes', 'notas', 'fieldnotes') || `Importado de ${filename}.`,
+    officialSource: get('source', 'fonte', 'officialsource') || `Ficheiro importado (${filename})`,
+    version: 'v1.0.0-import',
+    status: 'draft',
+    unmeasured,
   };
 }
 
-// CSV/JSON Data Parser for User Geological Injection
-export function parseUserInjectedData(rawText: string, filename: string): Partial<GeologicalSample>[] {
-  const isJson = filename.endsWith('.json') || rawText.trim().startsWith('{') || rawText.trim().startsWith('[');
+/**
+ * Parses user CSV/JSON files into partial samples. Nothing is invented: values the file does
+ * not contain are left empty and listed in `unmeasured`.
+ *
+ * CSV columns (case-insensitive, PT or EN): name, siteId, collector, institution, date, lat, lng,
+ * depth, aw, ph, porosity, target, classification, notes, source,
+ * minerals ("Hematita: 30; Gesso: 20") or one column per mineral as "mineral:Hematita",
+ * and oxide columns SiO2, Fe2O3, Al2O3, MgO, CaO, ... (wt%).
+ */
+export function parseUserInjectedData(rawText: string, filename: string): ParsedSampleRow[] {
+  const trimmed = rawText.trim().replace(/^﻿/, '');
+  const isJson = filename.toLowerCase().endsWith('.json') || trimmed.startsWith('{') || trimmed.startsWith('[');
 
   if (isJson) {
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(rawText);
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      return arr.map((item, idx) => ({
-        id: item.id || `inj-${Date.now()}-${idx}`,
-        name: item.name || `Amostra Importada ${idx + 1}`,
-        siteId: item.siteId || 'atacama',
-        collectorName: item.collectorName || 'Pesquisador Anônimo',
-        institution: item.institution || 'Instituição Científica Colaborativa',
-        collectedAt: item.collectedAt || new Date().toISOString().split('T')[0],
-        coordinates: item.coordinates || [-24.089, -69.873],
-        depthCm: item.depthCm || 5.0,
-        rockClassification: item.rockClassification || 'Regolito Análogo Não Classificado',
-        targetPlanet: item.targetPlanet || 'Mars',
-        waterActivity: item.waterActivity !== undefined ? item.waterActivity : 0.35,
-        pH: item.pH !== undefined ? item.pH : 7.0,
-        porosityPercent: item.porosityPercent || 18.0,
-        minerals: item.minerals || { 'Silicatos': 60, 'Óxidos de Ferro': 25, 'Sulfatos': 15 },
-        xrfComposition: item.xrfComposition || { 'SiO2': 52.0, 'Fe2O3': 18.4, 'Al2O3': 14.1 },
-        fieldNotes: item.fieldNotes || 'Dados injetados via upload JSON.',
-        version: 'v1.0.0-user-injected',
-        status: 'draft',
-      }));
+      parsed = JSON.parse(trimmed);
     } catch (e: any) {
       throw new Error(`Erro ao interpretar JSON: ${e.message}`);
     }
-  }
-
-  // Parse CSV
-  const lines = rawText.trim().split(/\r?\n/).filter(line => line.trim().length > 0);
-  if (lines.length < 2) {
-    throw new Error('O arquivo CSV deve conter um cabeçalho e pelo menos uma linha de dados.');
-  }
-
-  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
-  const results: Partial<GeologicalSample>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map(c => c.trim());
-    if (cols.length < 2) continue;
-
-    const row: any = {};
-    header.forEach((key, colIdx) => {
-      row[key] = cols[colIdx] || '';
-    });
-
-    const sampleName = row['name'] || row['nome'] || row['amostra'] || `Amostra CSV #${i}`;
-    const lat = parseFloat(row['lat'] || row['latitude'] || '-24.089');
-    const lng = parseFloat(row['lng'] || row['lon'] || row['longitude'] || '-69.873');
-    const depth = parseFloat(row['depth'] || row['profundidade'] || '5');
-    const aw = parseFloat(row['aw'] || row['water_activity'] || '0.38');
-    const ph = parseFloat(row['ph'] || '7.0');
-
-    results.push({
-      id: `inj-csv-${Date.now()}-${i}`,
-      name: sampleName,
-      siteId: row['siteid'] || row['sitio'] || 'atacama',
-      collectorName: row['collector'] || row['coletor'] || 'Equipe Científica',
-      institution: row['institution'] || row['instituicao'] || 'Consórcio Internacional',
-      collectedAt: row['date'] || row['data'] || new Date().toISOString().split('T')[0],
-      coordinates: [isNaN(lat) ? -24.089 : lat, isNaN(lng) ? -69.873 : lng],
-      depthCm: isNaN(depth) ? 5 : depth,
-      rockClassification: row['classification'] || row['classificacao'] || 'Regolito Vulcânico/Evaporito',
-      targetPlanet: resolveCsvTargetPlanet(row['target'] || row['planeta'] || row['astro']),
-      waterActivity: isNaN(aw) ? 0.38 : aw,
-      pH: isNaN(ph) ? 7.0 : ph,
-      porosityPercent: 20.0,
-      minerals: {
-        'Minerais de Ferro/Silicato': 55,
-        'Sulfatos / Evaporitos': 30,
-        'Outros': 15,
-      },
-      xrfComposition: {
-        'SiO2': 49.5,
-        'Fe2O3': 16.2,
-        'CaO': 8.4,
-      },
-      fieldNotes: row['notes'] || row['notas'] || `Injetado via CSV (${filename})`,
-      version: 'v1.0.0-user-injected',
-      status: 'draft',
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
+    return arr.map((item: any, idx) => {
+      const lower: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(item || {})) lower[k.toLowerCase()] = v;
+      const get = (...keys: string[]) => {
+        for (const k of keys) {
+          const v = lower[k.toLowerCase()];
+          if (v !== undefined && v !== null && v !== '') return String(v);
+        }
+        return undefined;
+      };
+      const minerals: Record<string, number> = {};
+      if (item?.minerals && typeof item.minerals === 'object') {
+        for (const [k, v] of Object.entries(item.minerals)) {
+          const n = toNumber(v);
+          if (n !== undefined) minerals[k] = n;
+        }
+      } else if (typeof item?.minerals === 'string') {
+        Object.assign(minerals, parseCompositionList(item.minerals));
+      }
+      const xrf: Record<string, number> = {};
+      const xrfSrc = item?.xrfComposition || item?.xrf;
+      if (xrfSrc && typeof xrfSrc === 'object') {
+        for (const [k, v] of Object.entries(xrfSrc)) {
+          const n = toNumber(v);
+          if (n !== undefined) xrf[k] = n;
+        }
+      }
+      const row = buildRow(get, minerals, xrf, idx + 1, filename);
+      if (Array.isArray(item?.coordinates) && item.coordinates.length === 2) {
+        const [la, ln] = item.coordinates.map(Number);
+        if (Number.isFinite(la) && Number.isFinite(ln)) {
+          row.coordinates = [la, ln];
+          row.unmeasured = row.unmeasured.filter((f) => f !== 'coordinates');
+        }
+      }
+      return row;
     });
   }
 
-  return results;
+  const delimiter = (trimmed.split(/\r?\n/)[0].match(/;/g) || []).length > (trimmed.split(/\r?\n/)[0].match(/,/g) || []).length ? ';' : ',';
+  const rows = parseCsv(trimmed, delimiter);
+  if (rows.length < 2) {
+    throw new Error('O ficheiro CSV deve conter um cabeçalho e pelo menos uma linha de dados.');
+  }
+  const header = rows[0].map((h) => h.trim());
+  const headerLower = header.map((h) => h.toLowerCase());
+
+  return rows.slice(1).map((cols, i) => {
+    const get = (...keys: string[]) => {
+      for (const k of keys) {
+        const idx = headerLower.indexOf(k.toLowerCase());
+        if (idx >= 0 && cols[idx] !== undefined && cols[idx] !== '') return cols[idx];
+      }
+      return undefined;
+    };
+
+    const minerals = parseCompositionList(get('minerals', 'minerais'));
+    headerLower.forEach((h, idx) => {
+      const m = h.match(/^(?:mineral|mineral_|min)[:_](.+)$/);
+      const n = toNumber(cols[idx]);
+      if (m && n !== undefined) minerals[header[idx].slice(header[idx].search(/[:_]/) + 1).trim()] = n;
+    });
+
+    const xrf: Record<string, number> = {};
+    headerLower.forEach((h, idx) => {
+      if (OXIDE_COLUMNS.includes(h)) {
+        const n = toNumber(cols[idx]);
+        if (n !== undefined) xrf[OXIDE_LABEL[h]] = n;
+      }
+    });
+
+    return buildRow(get, minerals, xrf, i + 1, filename);
+  });
 }
 
-function resolveCsvTargetPlanet(raw?: string): PlanetaryTarget {
-  if (!raw) return 'Mars';
+function resolveCsvTargetPlanet(raw?: string): PlanetaryTarget | undefined {
+  if (!raw) return undefined;
   const normalized = raw.trim().toLowerCase();
   const matched = CELESTIAL_BODIES.find(
     (b) => b.id.toLowerCase() === normalized || b.namePt.toLowerCase() === normalized
   );
-  return matched ? matched.id : 'Mars';
+  return matched ? matched.id : undefined;
 }
