@@ -38,6 +38,7 @@ import { computeAnalogueFidelity, generateSpectralReflectanceCurve } from './ser
 import { computeSampleFingerprint } from './services/fingerprint';
 import { endorseBlockReason, reviewStatus } from './services/peerReview';
 import { api, ApiError, mergeById } from './services/api';
+import type { SaveState } from './components/ResearchSteps';
 
 /** Merges two message maps (per study), de-duplicating by message id and keeping time order. */
 function mergeThreads(
@@ -361,16 +362,29 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Saves a study locally and, when signed in, in the shared database (server copy wins). */
+  /** Where the last save went, shown next to the save button. */
+  const [saveState, setSaveState] = useState<SaveState | null>(null);
+
+  /** Saves a study locally and, when signed in, publishes it to the shared database. */
   const handleSaveSample = (sample: GeologicalSample) => {
     setSamples((prev) => [sample, ...prev.filter((s) => s.id !== sample.id)]);
     setActiveSample(sample);
-    syncRemote('Estudo não publicado no servidor', () =>
-      api.saveSample(sample).then((saved) => {
+    const at = new Date().toISOString();
+    if (!api.hasSession()) {
+      setSaveState({ sampleId: sample.id, at, remote: 'local' });
+      return;
+    }
+    setSaveState({ sampleId: sample.id, at, remote: 'pending' });
+    api
+      .saveSample(sample)
+      .then((saved) => {
         setSamples((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
         setActiveSample((cur) => (cur.id === saved.id ? saved : cur));
+        setSaveState({ sampleId: saved.id, at: new Date().toISOString(), remote: 'ok' });
       })
-    );
+      .catch((err: Error) => {
+        setSaveState({ sampleId: sample.id, at, remote: 'error', message: err.message });
+      });
   };
 
   const handlePublishStudyFromProfile = (newStudy: GeologicalSample) => handleSaveSample(newStudy);
@@ -648,6 +662,8 @@ export default function App() {
             onUpdateAiSnapshot={handleUpdateAiSnapshot}
             onOpenPublishFromAi={handleOpenPublishFromAi}
             onStartNewAnalysis={handleNewAnalysis}
+            saveState={saveState}
+            isSignedIn={Boolean(currentUser)}
           />
         )}
 

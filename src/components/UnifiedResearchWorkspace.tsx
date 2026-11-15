@@ -13,6 +13,9 @@ import { computeSampleFingerprint } from '../services/fingerprint';
 import { AnalogueDashboard } from './AnalogueDashboard';
 import { NasaDataShortcutsModal, NasaShortcutFilter } from './NasaDataShortcutsModal';
 import { InteractiveSiteMap, InteractiveSiteMapHandle, MapPickedPoint } from './InteractiveSiteMap';
+import { MineralEditor, MineralRow, mineralsFromRows, newMineralRow, rowsFromMinerals } from './MineralEditor';
+import { ResearchSteps, SaveIndicator, SaveState } from './ResearchSteps';
+import { studyLink } from '../services/links';
 import {
   DWARF_PLANET_BODIES,
   getCelestialBodyFullLabel,
@@ -182,6 +185,9 @@ interface UnifiedResearchWorkspaceProps {
   onOpenPublishFromAi?: () => void;
   /** Starts an empty analysis (used by the "example" banner). */
   onStartNewAnalysis?: () => void;
+  /** Result of the last save (local only, publishing, published, failed). */
+  saveState?: SaveState | null;
+  isSignedIn?: boolean;
 }
 
 export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> = ({
@@ -200,6 +206,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   onUpdateAiSnapshot,
   onOpenPublishFromAi,
   onStartNewAnalysis,
+  saveState,
+  isSignedIn = false,
 }) => {
   // --- Unified Left Panel Mode: Manual Data Entry (Primary) | AI Copilot | Computer Vision Copilot ---
   const [inputMode, setInputMode] = useState<'prompt_doc' | 'data_form' | 'vision'>('data_form');
@@ -231,12 +239,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const [pH, setPH] = useState(activeSample.pH);
   const [depthCm, setDepthCm] = useState(activeSample.depthCm);
   const [porosityPercent, setPorosityPercent] = useState(activeSample.porosityPercent);
-  const [minerals, setMinerals] = useState<{ [mineral: string]: number }>(activeSample.minerals);
-  const [mineralsManualText, setMineralsManualText] = useState(
-    Object.entries(activeSample.minerals)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join(', ')
-  );
+  const [mineralRows, setMineralRows] = useState<MineralRow[]>(() => rowsFromMinerals(activeSample.minerals));
+  const minerals = useMemo(() => mineralsFromRows(mineralRows), [mineralRows]);
   const [fieldNotes, setFieldNotes] = useState(activeSample.fieldNotes);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -255,12 +259,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     setPH(activeSample.pH);
     setDepthCm(activeSample.depthCm);
     setPorosityPercent(activeSample.porosityPercent);
-    setMinerals(activeSample.minerals);
-    setMineralsManualText(
-      Object.entries(activeSample.minerals)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(', ')
-    );
+    setMineralRows(rowsFromMinerals(activeSample.minerals));
     setFieldNotes(activeSample.fieldNotes);
     setUnmeasuredNow(new Set(activeSample.unmeasured || []));
   }, [activeSample, selectedSite.name, sites]);
@@ -373,6 +372,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const [copiedReport, setCopiedReport] = useState(false);
 
   const reportSectionRef = useRef<HTMLElement>(null);
+  const inputSectionRef = useRef<HTMLElement>(null);
+  const dashboardRef = useRef<HTMLDivElement>(null);
 
   const filteredSites = useMemo(() => sites.filter((s) => {
     const regionOk =
@@ -595,34 +596,6 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     }
   };
 
-  const parseManualMineralsInput = (text: string): Record<string, number> => {
-    const map: Record<string, number> = {};
-    const parts = text
-      .split(/[,;\n]+/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    parts.forEach((part) => {
-      const m = part.match(/^(.+?)\s*[:=]\s*(\d+(?:[.,]\d+)?)/);
-      if (m) {
-        map[m[1].trim()] = Math.max(1, parseFloat(m[2].replace(',', '.')));
-      } else {
-        map[part] = 0;
-      }
-    });
-    const keys = Object.keys(map);
-    if (keys.length === 0) return minerals;
-    const zeroKeys = keys.filter((k) => map[k] === 0);
-    if (zeroKeys.length > 0) {
-      const assigned = keys.reduce((acc, k) => acc + map[k], 0);
-      const rem = Math.max(10, 100 - assigned);
-      const each = Math.max(5, Math.round(rem / zeroKeys.length));
-      zeroKeys.forEach((k) => {
-        map[k] = each;
-      });
-    }
-    return map;
-  };
-
   // Save Structured Manual Sample Data directly into Dashboard & Network
   const handleSaveDataForm = (e: React.FormEvent) => {
     e.preventDefault();
@@ -636,7 +609,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       : undefined;
     const chosenSite = matchedByText || sites.find((s) => s.id === siteId) || selectedSite;
     const finalLocation = typedLocation || chosenSite.name;
-    const parsedMinerals = parseManualMineralsInput(mineralsManualText);
+    const parsedMinerals = minerals;
     const manualAFI = computeAnalogueFidelity(
       {
         targetPlanet,
@@ -687,6 +660,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
     onSaveSample(updated);
     onSelectSite(chosenSite);
+    // Step 2: show the result right after saving.
+    requestAnimationFrame(() => dashboardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     setImportNotice(`Dados manuais de "${updated.name}" (${finalLocation}) salvos no painel!`);
     setTimeout(() => setImportNotice(null), 4000);
   };
@@ -1194,10 +1169,26 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         </div>
       )}
 
+      <ResearchSteps
+        isExample={isExampleSample}
+        sampleId={activeSample.id}
+        hasMinerals={Object.keys(minerals).length > 0}
+        saveState={saveState}
+        isSignedIn={isSignedIn}
+        onGoToSample={() => {
+          setInputMode('data_form');
+          inputSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
+        onGoToResult={() => dashboardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        onGoToShare={() => reportSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        studyLink={saveState?.remote === 'ok' && saveState.sampleId === activeSample.id ? studyLink(activeSample.id) : null}
+      />
+
       {/* BENTO ROW 1: INPUT BOWL (5 cols) + MAP BOWL (7 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* LEFT BOWL (5 cols): Ask AI | Send Data | Photo / Camera */}
         <section
+          ref={inputSectionRef}
           aria-labelledby="unified-input-heading"
           className="lg:col-span-5 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-5 transition-colors duration-150"
         >
@@ -1552,22 +1543,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   </div>
 
                   <div className="space-y-3">
-                    <div>
-                      <label htmlFor="u-minerals-text" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                        Minerais observados (ex: Basalto: 45, Óxido de Ferro: 35, Areia: 20)
-                      </label>
-                      <input
-                        id="u-minerals-text"
-                        type="text"
-                        value={mineralsManualText}
-                        onChange={(e) => {
-                          setMineralsManualText(e.target.value);
-                          setMinerals(parseManualMineralsInput(e.target.value));
-                        }}
-                        placeholder="Ex.: Basalto: 50, Óxido de Ferro: 30, Quartzo: 20"
-                        className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
-                      />
-                    </div>
+                    <MineralEditor
+                      rows={mineralRows}
+                      onChange={setMineralRows}
+                      suggestions={sites.flatMap((s) => s.primaryMinerals)}
+                    />
 
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-1">
@@ -1679,7 +1659,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   type="submit"
                   className="flex-1 min-h-[42px] py-2 px-4 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-sm font-medium rounded-xl transition-colors cursor-pointer"
                 >
-                  Salvar Dados Manuais no Painel
+                  {isSignedIn ? 'Guardar e publicar' : 'Guardar e ver resultado'}
                 </button>
                 {onOpenPublishFromAi && (
                   <button
@@ -1688,10 +1668,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     className="min-h-[42px] py-2 px-4 bg-[#0F766E] dark:bg-[#0D9488] hover:bg-[#0D9488] text-[#FFFFFF] text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                   >
                     <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    <span>Publicar Artigo</span>
+                    <span>Escrever artigo</span>
                   </button>
                 )}
               </div>
+              <SaveIndicator saveState={saveState} sampleId={activeSample.id} isSignedIn={isSignedIn} />
             </form>
           )}
 
@@ -2037,12 +2018,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       <button
                         type="button"
                         onClick={() => {
-                          const suggested = visionResult.minerals
+                          const existing = new Set(mineralRows.map((r) => r.name.trim().toLowerCase()));
+                          const added = (visionResult.minerals as string[])
                             .slice(0, 4)
-                            .map((m: string, idx: number, arr: string[]) => `${m}: ${Math.round(100 / arr.length)}`)
-                            .join(', ');
-                          setMineralsManualText(suggested);
-                          setMinerals(parseManualMineralsInput(suggested));
+                            .filter((m) => !existing.has(m.trim().toLowerCase()))
+                            .map((m) => newMineralRow(m, ''));
+                          setMineralRows([...mineralRows, ...added]);
                           setInputMode('data_form');
                         }}
                         className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#1E3A8A] dark:text-[#60A5FA] font-medium shadow-xs cursor-pointer"
@@ -2248,6 +2229,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       </div>
 
       {/* BENTO ROW 2: DASHBOARD COMPARATIVO (INDICATORS, RADAR, SPECTRAL, PROS & CONS, SIMILARITIES) */}
+      <div ref={dashboardRef} className="scroll-mt-20" />
       <AnalogueDashboard
         sites={sites}
         selectedSite={selectedSite}

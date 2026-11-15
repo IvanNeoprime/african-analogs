@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ContributionGraph } from './ContributionGraph';
 import { collectContributions } from '../services/contributions';
+import { studyLink } from '../services/links';
 import {
   AnalogueSite,
   CollaboratorProfile,
@@ -86,8 +87,6 @@ const similarityTone = (value: number) =>
     ? 'text-[#B45309] dark:text-[#FBBF24]'
     : 'text-[#B91C1C] dark:text-[#F87171]';
 
-export const studyLink = (sampleId: string) =>
-  `${window.location.origin}${window.location.pathname}#/comunidade/estudo/${encodeURIComponent(sampleId)}`;
 
 const formatMessageTime = (d: Date) =>
   d.toLocaleString('pt-PT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
