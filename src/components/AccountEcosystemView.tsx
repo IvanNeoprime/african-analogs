@@ -661,7 +661,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
               {[
                 { title: 'Seu espaço pessoal', desc: 'Escolha seu nome, foto e quais planetas você mais gosta.' },
                 { title: 'Publique e compartilhe', desc: 'Guarde suas pesquisas e receba dicas nos comentários.' },
-                { title: 'Simples e privado', desc: 'Suas informações ficam salvas aqui no seu aparelho.' },
+                { title: 'Privado por defeito', desc: 'O seu e-mail nunca é público. Só os estudos que publicar ficam visíveis.' },
               ].map((item) => (
                 <div key={item.title} className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-[#0F766E] dark:text-[#2DD4BF] shrink-0 mt-0.5" strokeWidth={1.75} />
@@ -736,7 +736,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 }`}
               >
                 <LogIn className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Entrar ({accounts.length})</span>
+                <span>Entrar</span>
               </button>
             </div>
 
@@ -798,7 +798,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
                       <label htmlFor="reg-pwd" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Senha (mín. 6 dígitos) *
+                        Senha (mín. 8 caracteres) *
                       </label>
                       <div className="relative">
                         <input
@@ -808,7 +808,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                           type={showRegPassword ? 'text' : 'password'}
                           value={regPassword}
                           onChange={(e) => setRegPassword(e.target.value)}
-                          placeholder="••••••"
+                          placeholder="••••••••"
                           className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm pl-3.5 pr-9 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                         />
                         <button
@@ -833,7 +833,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                         type={showRegPassword ? 'text' : 'password'}
                         value={regConfirmPassword}
                         onChange={(e) => setRegConfirmPassword(e.target.value)}
-                        placeholder="••••••"
+                        placeholder="••••••••"
                         className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                       />
                     </div>
@@ -1086,7 +1086,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                       type={showLoginPassword ? 'text' : 'password'}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="••••••"
+                      placeholder="••••••••"
                       className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm pl-3.5 pr-9 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                     />
                     <button
@@ -1583,7 +1583,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 <div className="space-y-4 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                      Notas dos gráficos (Arco Geral e Gráfico Estrela 0–100%)
+                      Notas por critério (0–100%)
                     </span>
                     <button
                       type="button"
@@ -1631,7 +1631,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label htmlFor="pub-minerals" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Minerais do Gráfico de Pizza (Ex: Basalto: 45, Ferro: 35, Areia: 20)
+                        Minerais (ex.: Basalto: 45, Ferro: 35, Areia: 20)
                       </label>
                       <input
                         id="pub-minerals"
@@ -1658,7 +1658,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label htmlFor="pub-aw" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Umidade (0–1)
+                        Atividade de água (aw, 0–1)
                       </label>
                       <input
                         id="pub-aw"

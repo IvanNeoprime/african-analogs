@@ -1487,7 +1487,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                     {/* 4 Quantitative Bento Metrics */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div className="p-3.5 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                        <span className="text-[#475569] dark:text-[#94A3B8] block">Umidade do Solo</span>
+                        <span className="text-[#475569] dark:text-[#94A3B8] block">Atividade de água (aw)</span>
                         <strong className="font-mono text-base text-[#0F172A] dark:text-[#F0F6FC] tabular-nums">
                           {Math.round(activeSampleDetail.waterActivity * 100)}%
                         </strong>

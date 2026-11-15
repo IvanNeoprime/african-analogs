@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnalogueSite, CollaboratorProfile, GeologicalSample, LatestAiAnalysisSnapshot, PlanetaryTarget } from '../types';
+import { AnalogueSite, CollaboratorProfile, GeologicalSample, LatestAiAnalysisSnapshot, PlanetaryTarget, UnmeasuredField } from '../types';
+import { INITIAL_SAMPLES } from '../data/planetaryData';
+
+const DEMO_SAMPLE_IDS = new Set(INITIAL_SAMPLES.map((s) => s.id));
 import { HARDCODED_API_ENDPOINTS, fetchOfficialElevation, fetchOfficialNasaEvents, NasaEonetEventItem } from '../services/officialApis';
 import {
   computeAnalogueFidelity,
@@ -177,6 +180,8 @@ interface UnifiedResearchWorkspaceProps {
   onAttachDiagnostics: (text: string) => void;
   onUpdateAiSnapshot?: (patch: Partial<LatestAiAnalysisSnapshot>) => void;
   onOpenPublishFromAi?: () => void;
+  /** Starts an empty analysis (used by the "example" banner). */
+  onStartNewAnalysis?: () => void;
 }
 
 export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> = ({
@@ -194,6 +199,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   onAttachDiagnostics,
   onUpdateAiSnapshot,
   onOpenPublishFromAi,
+  onStartNewAnalysis,
 }) => {
   // --- Unified Left Panel Mode: Manual Data Entry (Primary) | AI Copilot | Computer Vision Copilot ---
   const [inputMode, setInputMode] = useState<'prompt_doc' | 'data_form' | 'vision'>('data_form');
@@ -256,15 +262,34 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         .join(', ')
     );
     setFieldNotes(activeSample.fieldNotes);
+    setUnmeasuredNow(new Set(activeSample.unmeasured || []));
   }, [activeSample, selectedSite.name, sites]);
+
+  // Fields without a measurement are shown empty ("não medido") and excluded from the score,
+  // instead of silently counting placeholders such as aw 0 or pH 7.
+  const [unmeasuredNow, setUnmeasuredNow] = useState<Set<UnmeasuredField>>(() => new Set(activeSample.unmeasured || []));
+  const setFieldMeasured = (field: UnmeasuredField, measured: boolean) =>
+    setUnmeasuredNow((prev) => {
+      const next = new Set(prev);
+      if (measured) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  const unmeasuredList = useMemo<UnmeasuredField[]>(() => {
+    const list: UnmeasuredField[] = [...unmeasuredNow].filter((f) => f !== 'minerals');
+    if (Object.keys(minerals).length === 0) list.push('minerals');
+    return list;
+  }, [unmeasuredNow, minerals]);
+
+  const isExampleSample = DEMO_SAMPLE_IDS.has(activeSample.id);
 
   const liveAFI = useMemo(() => {
     return computeAnalogueFidelity(
-      { targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals },
+      { targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals, unmeasured: unmeasuredList },
       targetPlanet,
       sites.find((s) => s.id === siteId) || selectedSite
     );
-  }, [targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals, siteId, sites, selectedSite]);
+  }, [targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals, unmeasuredList, siteId, sites, selectedSite]);
 
   // --- Computer Vision & Real-Time Camera + TIFF / Encrypted Image States ---
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -613,7 +638,15 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     const finalLocation = typedLocation || chosenSite.name;
     const parsedMinerals = parseManualMineralsInput(mineralsManualText);
     const manualAFI = computeAnalogueFidelity(
-      { targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals: parsedMinerals },
+      {
+        targetPlanet,
+        waterActivity,
+        pH,
+        depthCm,
+        porosityPercent,
+        minerals: parsedMinerals,
+        unmeasured: unmeasuredList.filter((f) => f !== 'minerals'),
+      },
       targetPlanet,
       chosenSite
     );
@@ -644,8 +677,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       version: 'v1.0.0-manual',
       publishedAt: new Date().toISOString(),
       status: 'under_review',
-      // Manually entered values are measurements; clear any import placeholders.
-      unmeasured: Object.keys(parsedMinerals).length === 0 ? ['minerals'] : [],
+      // Only what the person actually filled in counts as measured.
+      unmeasured: [
+        ...unmeasuredList.filter((f) => f !== 'minerals'),
+        ...(Object.keys(parsedMinerals).length === 0 ? (['minerals'] as UnmeasuredField[]) : []),
+      ],
     };
     updated.hash = computeSampleFingerprint(updated);
 
@@ -1175,7 +1211,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg cursor-help"
                   title={liveAFI.notes.join('\n')}
                 >
-                  Semelhança: <strong className="font-mono tabular-nums">{liveAFI.total}%</strong>
+                  A sua amostra: <strong className="font-mono tabular-nums">{liveAFI.total}%</strong>
                   {liveAFI.coverage < 1 && (
                     <span className="ml-1 text-[#B45309] dark:text-[#FBBF24]">
                       · dados {Math.round(liveAFI.coverage * 100)}%
@@ -1186,6 +1222,25 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
                 Você insere os dados manualmente; a IA atua apenas como copiloto para analisar.
               </p>
+              {isExampleSample && (
+                <div
+                  role="note"
+                  className="mt-2 flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-xs text-[#92400E] dark:text-[#FCD34D]"
+                >
+                  <span>
+                    <strong>Está a ver um exemplo</strong> com dados fictícios. Os seus dados começam com uma análise nova.
+                  </span>
+                  {onStartNewAnalysis && (
+                    <button
+                      type="button"
+                      onClick={onStartNewAnalysis}
+                      className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-semibold shadow-xs cursor-pointer"
+                    >
+                      Começar do zero
+                    </button>
+                  )}
+                </div>
+              )}
               <details className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
                 <summary className="cursor-pointer select-none">Como a semelhança é calculada</summary>
                 <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
@@ -1539,8 +1594,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div>
-                        <label htmlFor="u-aw" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                          Umidade (0–1)
+                        <label htmlFor="u-aw" title="Atividade de água: 0 = totalmente seco, 1 = água pura" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1 cursor-help">
+                          Água (aw, 0–1)
                         </label>
                         <input
                           id="u-aw"
@@ -1548,8 +1603,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           step="0.01"
                           min="0"
                           max="1"
-                          value={waterActivity}
-                          onChange={(e) => setWaterActivity(parseFloat(e.target.value) || 0)}
+                          value={unmeasuredNow.has('waterActivity') ? '' : waterActivity}
+                          placeholder="não medido"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setFieldMeasured('waterActivity', v !== '');
+                            if (v !== '' && Number.isFinite(parseFloat(v))) setWaterActivity(parseFloat(v));
+                          }}
                           className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-xs px-2.5 py-2 rounded-xl tabular-nums"
                         />
                       </div>
@@ -1563,8 +1623,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           step="0.1"
                           min="0"
                           max="14"
-                          value={pH}
-                          onChange={(e) => setPH(parseFloat(e.target.value) || 7)}
+                          value={unmeasuredNow.has('pH') ? '' : pH}
+                          placeholder="não medido"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setFieldMeasured('pH', v !== '');
+                            if (v !== '' && Number.isFinite(parseFloat(v))) setPH(parseFloat(v));
+                          }}
                           className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-xs px-2.5 py-2 rounded-xl tabular-nums"
                         />
                       </div>
@@ -1576,8 +1641,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           id="u-depth"
                           type="number"
                           step="0.5"
-                          value={depthCm}
-                          onChange={(e) => setDepthCm(parseFloat(e.target.value) || 0)}
+                          value={unmeasuredNow.has('depthCm') ? '' : depthCm}
+                          placeholder="não medido"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setFieldMeasured('depthCm', v !== '');
+                            if (v !== '' && Number.isFinite(parseFloat(v))) setDepthCm(parseFloat(v));
+                          }}
                           className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-xs px-2.5 py-2 rounded-xl tabular-nums"
                         />
                       </div>
@@ -1589,8 +1659,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           id="u-porosity"
                           type="number"
                           step="0.5"
-                          value={porosityPercent}
-                          onChange={(e) => setPorosityPercent(parseFloat(e.target.value) || 0)}
+                          value={unmeasuredNow.has('porosityPercent') ? '' : porosityPercent}
+                          placeholder="não medido"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setFieldMeasured('porosityPercent', v !== '');
+                            if (v !== '' && Number.isFinite(parseFloat(v))) setPorosityPercent(parseFloat(v));
+                          }}
                           className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-xs px-2.5 py-2 rounded-xl tabular-nums"
                         />
                       </div>
@@ -2089,7 +2164,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
               <div>
                 <div className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                  {selectedSite.country} ({selectedSite.region}) · Parecido com {selectedSite.targetPlanet}
+                  {selectedSite.country} ({selectedSite.region}) · Análogo de {getCelestialBodyLabel(selectedSite.targetPlanet)}
                 </div>
                 <h3 className="font-poppins text-base sm:text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC] mt-0.5">
                   {selectedSite.name}
@@ -2098,7 +2173,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
               <div className="text-right shrink-0 bg-[#F1F5F9] dark:bg-[#21262D] px-3 py-1.5 rounded-xl">
                 <div className="text-[11px] text-[#475569] dark:text-[#94A3B8]" title="Estimativa editorial, não medida">
-                  Semelhança (estimativa)
+                  Estimativa do sítio
                 </div>
                 <div className="text-lg font-bold font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">
                   {selectedSite.fidelityScore}%
@@ -2119,9 +2194,9 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 </span>
               </div>
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                <span className="text-[#475569] dark:text-[#94A3B8] block">Umidade do Solo</span>
+                <span className="text-[#475569] dark:text-[#94A3B8] block">Atividade de água</span>
                 <span className="font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5 block">
-                  {Math.round(selectedSite.waterActivityAw * 100)}% ({selectedSite.waterActivityAw < 0.35 ? 'Muito seco' : 'Moderado'})
+                  aw {selectedSite.waterActivityAw} ({selectedSite.waterActivityAw < 0.35 ? 'muito seco' : 'moderado'})
                 </span>
               </div>
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">

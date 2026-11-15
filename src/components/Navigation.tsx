@@ -35,12 +35,12 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
     {
       id: 'peer_network',
-      label: `Colaboradores (${totalPeerSamples})`,
+      label: 'Comunidade',
       icon: <Users className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />,
     },
     {
       id: 'account_profile',
-      label: displayFirstName ? `Perfil · ${displayFirstName}` : 'Entrar / Perfil',
+      label: displayFirstName ? `Conta · ${displayFirstName}` : 'Entrar',
       icon: currentUser ? (
         <img
           src={currentUser.avatarUrl}

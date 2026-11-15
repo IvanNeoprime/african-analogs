@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnalogueSite, GeologicalSample, LatestAiAnalysisSnapshot } from '../types';
 import { computeAnalogueFidelity, generateSpectralReflectanceCurve } from '../services/spectralEngine';
+import { getCelestialBodyLabel } from '../data/celestialBodies';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -186,7 +187,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
       ['Solo (%)', String(activeSample.fidelityScores.geochemistry)],
       ['Sol UV (%)', String(activeSample.fidelityScores.radiation)],
       ['Clima (%)', String(activeSample.fidelityScores.thermal)],
-      ['Umidade (aw)', String(activeSample.waterActivity)],
+      ['Atividade de agua (aw)', String(activeSample.waterActivity)],
       ['pH', String(activeSample.pH)],
       ['Profundidade (cm)', String(activeSample.depthCm)],
       ['Minerais', Object.entries(activeSample.minerals).map(([k, v]) => `${k}:${v}%`).join('; ')],
@@ -276,6 +277,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
   }, [mineralSlices]);
 
   // Arc Gauge Calculations (AFI 0..100%)
+  const targetLabel = getCelestialBodyLabel(activeSample.targetPlanet);
   const afiScore = Math.max(0, Math.min(100, activeSample.fidelityScores.total));
   const arcRadius = 74;
   const arcHalfCircumference = Math.PI * arcRadius;
@@ -294,11 +296,11 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
     if (activeSample.waterActivity <= 0.35) {
       pros.push(
-        `Solo bem seco (umidade ${activeSample.waterActivity}), muito parecido com o clima seco de ${activeSample.targetPlanet}.`
+        `Solo bem seco (atividade de água aw ${activeSample.waterActivity}), muito parecido com o clima seco de ${targetLabel}.`
       );
     } else {
       cons.push(
-        `Umidade um pouco alta (${activeSample.waterActivity}) comparada aos ambientes secos de ${activeSample.targetPlanet}.`
+        `Atividade de água um pouco alta (aw ${activeSample.waterActivity}) comparada aos ambientes secos de ${targetLabel}.`
       );
     }
 
@@ -321,7 +323,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
     if (selectedSite.atmosphericPressureMbar > 700) {
       cons.push(
-        `Aqui na Terra o ar é mais denso que em ${activeSample.targetPlanet}, o que muda testes ao ar livre.`
+        `Aqui na Terra o ar é mais denso que em ${targetLabel}, o que muda testes ao ar livre.`
       );
     }
 
@@ -408,7 +410,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <p className="text-xs sm:text-sm text-[#475569] dark:text-[#94A3B8] mt-0.5">
               <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{activeSample.name}</strong> · Lugar:{' '}
               <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{displayLocation}</strong> · Comparando com{' '}
-              <strong className="text-[#1E3A8A] dark:text-[#60A5FA]">{activeSample.targetPlanet}</strong>
+              <strong className="text-[#1E3A8A] dark:text-[#60A5FA]">{targetLabel}</strong>
             </p>
           </div>
 
@@ -637,7 +639,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
               <div className="sm:col-span-2">
                 <label htmlFor="dash-edit-minerals" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Minerais no Gráfico de Pizza (ex.: Basalto: 50, Ferro: 30, Gesso: 20)
+                  Minerais (ex.: Basalto: 50, Ferro: 30, Gesso: 20)
                 </label>
                 <input
                   id="dash-edit-minerals"
@@ -649,7 +651,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-edit-aw" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Umidade (0–1)
+                  Atividade de água (aw, 0–1)
                 </label>
                 <input
                   id="dash-edit-aw"
@@ -681,7 +683,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
             <div>
               <span className="block text-[11px] font-medium text-[#475569] dark:text-[#94A3B8] mb-1.5">
-                Elementos da Rocha (%) — Gráfico de Barras
+                Elementos da rocha (%)
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {Object.entries(dashXrf).map(([oxide, val]) => (
@@ -744,7 +746,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
       {/* 1. Simple KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <div className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">Semelhança Geral</span>
+          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">A sua amostra · parecida com {targetLabel}</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums my-1.5">
             {activeSample.fidelityScores.total}%
           </div>
@@ -767,17 +769,17 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             {activeSample.fidelityScores.geochemistry}%
           </div>
           <span className="text-xs text-[#475569] dark:text-[#94A3B8] tabular-nums">
-            Umidade {activeSample.waterActivity} · pH {activeSample.pH}
+            aw {activeSample.waterActivity} · pH {activeSample.pH}
           </span>
         </div>
 
-        <div className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">Sol &amp; Temperatura</span>
-          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#0F172A] dark:text-[#F0F6FC] tabular-nums my-1.5">
+        <div className="bg-[#F8FAFC] dark:bg-[#0D1117] border border-dashed border-[#CBD5E1] dark:border-[#30363D] rounded-2xl p-5 flex flex-col justify-between">
+          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">Ambiente do sítio (referência)</span>
+          <div className="text-2xl sm:text-3xl font-bold font-mono text-[#475569] dark:text-[#94A3B8] tabular-nums my-1.5">
             {Math.round((activeSample.fidelityScores.thermal + activeSample.fidelityScores.radiation) / 2)}%
           </div>
           <span className="text-xs text-[#475569] dark:text-[#94A3B8] tabular-nums">
-            Sol UV: {selectedSite.uvRadiationWm2} W/m²
+            Sol e temperatura · não entra na nota da amostra
           </span>
         </div>
       </div>
@@ -789,10 +791,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <Gauge className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Gráfico de Arco — Nível de Semelhança</span>
+              <span>Nível de semelhança</span>
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-              Mostra o quanto este lugar se parece com {activeSample.targetPlanet}
+              Quanto a sua amostra se parece com {targetLabel}
             </p>
           </div>
 
@@ -828,7 +830,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                 textAnchor="middle"
                 className="fill-[#0F172A] dark:fill-[#F0F6FC] text-2xl font-bold font-mono"
               >
-                {afiScore.toFixed(0)}%
+                {afiScore}%
               </text>
               <text
                 x="100"
@@ -836,7 +838,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                 textAnchor="middle"
                 className="fill-[#475569] dark:fill-[#94A3B8] text-[10px] font-medium"
               >
-                COM {activeSample.targetPlanet.toUpperCase()}
+                COM {targetLabel.toUpperCase()}
               </text>
               <text x="22" y="118" textAnchor="middle" className="fill-[#64748B] text-[9px] font-mono">0%</text>
               <text x="100" y="18" textAnchor="middle" className="fill-[#64748B] text-[9px] font-mono">50%</text>
@@ -868,7 +870,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <PieChart className="w-4 h-4 text-[#0F766E] dark:text-[#2DD4BF]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Gráfico de Pizza — Do que é Feito o Solo</span>
+              <span>Composição mineral</span>
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
               Porcentagem de cada tipo de mineral encontrado
@@ -946,10 +948,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <Compass className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Gráfico Estrela — 5 Pontos</span>
+              <span>Comparação em 5 critérios</span>
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-              Compara seu estudo com o padrão da NASA em 5 áreas
+              A sua amostra e o sítio de referência, critério a critério
             </p>
           </div>
 
@@ -1017,7 +1019,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
               <span className="inline-flex items-center gap-1.5 text-[#475569] dark:text-[#94A3B8]">
                 <span className="w-3 h-0.5 border-t-2 border-dashed border-[#0F766E] dark:border-[#2DD4BF] inline-block" />
-                <span>Referência NASA ({referenceSite.name.split(' ')[0]})</span>
+                <span>Sítio de referência ({referenceSite.name.split(' ')[0]})</span>
               </span>
             </div>
             <div className="text-[11px] text-center text-[#64748B] dark:text-[#8B949E]">
@@ -1034,10 +1036,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div>
               <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                <span>Gráfico de Linhas — Reflexo da Luz no Solo</span>
+                <span>Reflexão da luz (400–2500 nm)</span>
               </h3>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-                Compara como a luz reflete na sua amostra e no padrão do satélite
+                Curva estimada a partir dos minerais da amostra, comparada com o sítio de referência
               </p>
             </div>
             {hoveredPointIdx !== null && sampleCurve[hoveredPointIdx] ? (
@@ -1127,7 +1129,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
               <span className="inline-flex items-center gap-2 text-[#475569] dark:text-[#94A3B8]">
                 <span className="w-5 h-0.5 border-t-2 border-dashed border-[#0F766E] dark:border-[#2DD4BF] inline-block" />
-                <span>Padrão NASA ({referenceSite.name})</span>
+                <span>Sítio de referência ({referenceSite.name})</span>
               </span>
             </div>
             <span className="text-[11px] text-[#64748B] dark:text-[#8B949E]">
@@ -1228,7 +1230,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Lugares Mais Parecidos ({activeSample.targetPlanet})</span>
+              <span>Lugares Mais Parecidos ({targetLabel})</span>
             </h3>
             <span className="text-[11px] text-[#475569] dark:text-[#94A3B8]">Top 5</span>
           </div>

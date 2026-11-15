@@ -565,6 +565,35 @@ export default function App() {
   };
 
   const handleNewAnalysis = () => {
+    const blank: GeologicalSample = {
+      id: `smp-${Date.now().toString(36)}`,
+      name: '',
+      siteId: selectedSite.id,
+      customLocation: '',
+      collaboratorId: currentUser?.id,
+      collectorName: currentUser?.name || '',
+      institution: currentUser?.institution || '',
+      collectedAt: new Date().toISOString().slice(0, 10),
+      coordinates: selectedSite.coordinates,
+      depthCm: 0,
+      rockClassification: 'Não classificada',
+      targetPlanet: selectedSite.targetPlanet,
+      waterActivity: 0,
+      pH: 7,
+      porosityPercent: 0,
+      minerals: {},
+      xrfComposition: {},
+      fidelityScores: computeAnalogueFidelity({}, selectedSite.targetPlanet, selectedSite),
+      spectralCurve: generateSpectralReflectanceCurve({}),
+      fieldNotes: '',
+      version: 'v1.0.0-manual',
+      hash: '',
+      status: 'draft',
+      officialSource: 'Registo manual do pesquisador',
+      peerComments: [],
+      unmeasured: ['waterActivity', 'pH', 'depthCm', 'porosityPercent', 'minerals', 'xrfComposition'],
+    };
+    setActiveSample(blank);
     setVisionData(null);
     setAttachedDiagnostics(null);
     setActiveTab('research_workspace');
@@ -618,6 +647,7 @@ export default function App() {
             onAttachDiagnostics={(text) => setAttachedDiagnostics(text)}
             onUpdateAiSnapshot={handleUpdateAiSnapshot}
             onOpenPublishFromAi={handleOpenPublishFromAi}
+            onStartNewAnalysis={handleNewAnalysis}
           />
         )}
 
