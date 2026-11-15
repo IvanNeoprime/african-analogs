@@ -1260,7 +1260,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <Database className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                <span className="truncate">Dados Manuais</span>
+                <span className="truncate"><span className="sm:hidden">Dados</span><span className="hidden sm:inline">Dados Manuais</span></span>
               </button>
 
               <button
@@ -1275,7 +1275,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <MessageSquareText className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                <span className="truncate">Copiloto IA</span>
+                <span className="truncate"><span className="sm:hidden">IA</span><span className="hidden sm:inline">Copiloto IA</span></span>
               </button>
 
               <button
@@ -1290,7 +1290,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <Camera className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                <span className="truncate">Foto / Câmera</span>
+                <span className="truncate"><span className="sm:hidden">Foto</span><span className="hidden sm:inline">Foto / Câmera</span></span>
               </button>
             </div>
 
@@ -2500,7 +2500,43 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2">
+        {/* Phones: one card per site (the table squeezed names into one word per line). */}
+        <ul className="sm:hidden space-y-2">
+          {filteredSites.map((site) => {
+            const isSelected = site.id === selectedSite.id;
+            return (
+              <li key={site.id}>
+                <button
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    onSelectSite(site);
+                    setTargetPlanet(site.targetPlanet);
+                    setSiteId(site.id);
+                    setCustomLocation(site.name);
+                    mapRef.current?.flyTo(site.coordinates, 6);
+                  }}
+                  className={`w-full text-left p-3.5 rounded-xl transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] ${
+                    isSelected ? 'bg-[#EFF6FF] dark:bg-[#1E3A8A]/25' : 'bg-[#F8FAFC] dark:bg-[#0D1117]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="font-semibold text-sm text-[#0F172A] dark:text-[#F0F6FC]">{site.name}</span>
+                    <span className="shrink-0 font-mono text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums" title="Estimativa do sítio">
+                      {site.fidelityScore}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
+                    {site.country} · <span className="text-[#1E3A8A] dark:text-[#60A5FA] font-medium">{getCelestialBodyLabel(site.targetPlanet)}</span>
+                  </div>
+                  <div className="text-xs text-[#64748B] dark:text-[#8B949E] mt-0.5 truncate">{site.primaryMinerals.slice(0, 3).join(', ')}</div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="hidden sm:block overflow-x-auto rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
@@ -2547,7 +2583,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       {site.country} · {site.region}
                     </td>
                     <td className="py-3 px-4 text-xs text-[#1E3A8A] dark:text-[#60A5FA] font-medium">
-                      {site.targetPlanet}
+                      {getCelestialBodyLabel(site.targetPlanet)}
                     </td>
                     <td className="py-3 px-4 text-xs text-[#475569] dark:text-[#94A3B8] max-w-xs truncate">
                       {site.primaryMinerals.slice(0, 3).join(', ')}

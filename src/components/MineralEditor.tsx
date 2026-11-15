@@ -54,7 +54,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
   const update = (id: string, patch: Partial<MineralRow>) => onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="space-y-2 min-w-0">
       <legend className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">Minerais observados (% em massa)</legend>
       <datalist id={listId}>
         {options.map((o) => (

@@ -625,7 +625,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
       {/* Main Split: Left Content (8 cols) + Right Collaborators Directory (4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* LEFT WORKSPACE */}
-        <div className="lg:col-span-8 space-y-5 order-2 lg:order-1">
+        <div className="lg:col-span-8 space-y-5 order-1">
           {workspaceView === 'network' ? (
             /* ======================== RESEARCH NETWORK VIEW ======================== */
             <div className="space-y-5">
@@ -650,7 +650,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                 </div>
 
                 <div className="bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-4 overflow-x-auto">
-                  <svg viewBox="0 0 640 240" className="w-full min-w-[500px] h-auto" role="img" aria-label="Mapa de conexões entre pessoas">
+                  <svg viewBox="0 0 640 240" className="w-full h-auto" role="img" aria-label="Mapa de conexões entre pessoas">
                     {/* Center Hub: Você */}
                     {collaborators.map((col, idx) => {
                       const angle = ((idx - (collaborators.length - 1) / 2) * Math.PI) / 4.2;
@@ -1017,7 +1017,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                           value={directInput}
                           onChange={(e) => setDirectInput(e.target.value)}
                           placeholder={`Escreva uma mensagem para ${activeCollaborator.name}...`}
-                          className="flex-1 bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
+                          className="flex-1 min-w-0 bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                         />
                         <button
                           type="submit"
@@ -1388,7 +1388,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                           value={studyChatInput}
                           onChange={(e) => setStudyChatInput(e.target.value)}
                           placeholder="Escreva uma pergunta ou comentário sobre esta pesquisa..."
-                          className="flex-1 bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#64748B] text-sm px-3.5 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
+                          className="flex-1 min-w-0 bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#64748B] text-sm px-3.5 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                         />
                         <button
                           type="submit"
@@ -1784,7 +1784,7 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
         {/* RIGHT DIRECTORY (4 cols): People & Collaborators */}
         <aside
           aria-labelledby="collaborators-directory-heading"
-          className="lg:col-span-4 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 shadow-xs space-y-4 order-1 lg:order-2 lg:sticky lg:top-20 transition-colors duration-150"
+          className="lg:col-span-4 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 shadow-xs space-y-4 order-2 lg:sticky lg:top-20 transition-colors duration-150"
         >
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">

@@ -80,7 +80,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-nav-drawer"
             aria-label={mobileMenuOpen ? 'Fechar menu de navegação' : 'Abrir menu de navegação'}
-            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-[#0F172A] dark:text-[#F0F6FC] hover:bg-[#F1F5F9] dark:hover:bg-[#21262D] transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
+            className="hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-[#0F172A] dark:text-[#F0F6FC] hover:bg-[#F1F5F9] dark:hover:bg-[#21262D] transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
           >
             {mobileMenuOpen ? (
               <X className="w-5 h-5" strokeWidth={1.75} aria-hidden="true" />
@@ -92,7 +92,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <button
             type="button"
             onClick={() => handleSelectTab('research_workspace')}
-            className="font-poppins text-lg font-bold tracking-tight text-[#0F172A] dark:text-[#F0F6FC] hover:text-[#1E3A8A] dark:hover:text-[#60A5FA] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] rounded-md px-1"
+            className="font-poppins text-base sm:text-lg font-bold tracking-tight text-[#0F172A] dark:text-[#F0F6FC] hover:text-[#1E3A8A] dark:hover:text-[#60A5FA] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] rounded-md px-1"
           >
             African Analogs
           </button>
@@ -131,7 +131,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             aria-pressed={theme === 'dark'}
             aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
             title={theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
-            className="min-h-[40px] flex items-center gap-1.5 py-2 px-3 text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
+            className="min-h-[44px] min-w-[44px] sm:min-h-[40px] sm:min-w-0 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
           >
             {theme === 'dark' ? (
               <>
@@ -152,13 +152,43 @@ export const Navigation: React.FC<NavigationProps> = ({
               onNewAnalysis();
               setMobileMenuOpen(false);
             }}
-            className="min-h-[40px] flex items-center gap-1.5 py-2 px-3.5 sm:px-4 text-sm font-medium text-[#FFFFFF] bg-[#1E3A8A] dark:bg-[#2563EB] rounded-md hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#161B22]"
+            aria-label="Nova análise"
+            className="min-h-[44px] min-w-[44px] sm:min-h-[40px] flex items-center justify-center gap-1.5 py-2 px-3 sm:px-4 text-sm font-medium text-[#FFFFFF] bg-[#1E3A8A] dark:bg-[#2563EB] rounded-md hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#161B22]"
           >
-            <Plus className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-            <span>Nova Análise</span>
+            <Plus className="w-5 h-5 sm:w-4 sm:h-4" strokeWidth={2} aria-hidden="true" />
+            <span className="hidden sm:inline">Nova Análise</span>
           </button>
         </div>
       </div>
+
+      {/* Phones: bottom tab bar */}
+      <nav
+        aria-label="Navegação principal"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#FFFFFF] dark:bg-[#161B22] shadow-[0_-1px_0_0_rgba(15,23,42,0.08)] dark:shadow-[0_-1px_0_0_rgba(255,255,255,0.08)] pb-[env(safe-area-inset-bottom)]"
+      >
+        <ul className="grid grid-cols-3">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <li key={tab.id}>
+                <button
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => handleSelectTab(tab.id)}
+                  className={`w-full min-h-[56px] flex flex-col items-center justify-center gap-0.5 text-xs font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] ${
+                    isActive ? 'text-[#1E3A8A] dark:text-[#60A5FA]' : 'text-[#64748B] dark:text-[#8B949E]'
+                  }`}
+                >
+                  <span aria-hidden="true" className={`flex items-center justify-center h-7 w-12 rounded-full ${isActive ? 'bg-[#EFF6FF] dark:bg-[#1E3A8A]/30' : ''}`}>
+                    {tab.icon}
+                  </span>
+                  <span className="truncate max-w-full px-1">{tab.label.split(' · ')[0]}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
 
       {/* Responsive Hamburger Menu Drawer (Mobile) */}
       {mobileMenuOpen && (

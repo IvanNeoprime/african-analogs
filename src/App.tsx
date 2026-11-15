@@ -743,7 +743,7 @@ export default function App() {
         </div>
       )}
 
-      <footer className="mt-auto py-4 px-3 sm:px-5 lg:px-6 bg-[#FFFFFF] dark:bg-[#161B22] text-xs text-[#475569] dark:text-[#94A3B8] transition-colors duration-150">
+      <footer className="mt-auto py-4 pb-24 md:pb-4 px-3 sm:px-5 lg:px-6 bg-[#FFFFFF] dark:bg-[#161B22] text-xs text-[#475569] dark:text-[#94A3B8] transition-colors duration-150">
         <div className="w-full max-w-[1680px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-poppins font-semibold text-[#0F172A] dark:text-[#F0F6FC]">African Analogs</span>

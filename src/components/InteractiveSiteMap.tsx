@@ -215,7 +215,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
         });
       });
       map.on('mouseout', () => {
-        if (cursorReadoutRef.current) cursorReadoutRef.current.textContent = 'Passe o cursor ou clique no mapa';
+        if (cursorReadoutRef.current) cursorReadoutRef.current.textContent = window.matchMedia('(hover: hover)').matches ? 'Passe o cursor ou clique no mapa' : 'Toque no mapa para analisar um ponto';
       });
 
       // Click anywhere: inspect the point (SRTM elevation + nearest analogue).
@@ -479,7 +479,23 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
 
           {/* Top-left: base layer switcher + GIBS date */}
           <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-1.5 max-w-[calc(100%-7rem)]">
-            <div className="flex items-center gap-1 bg-[#FFFFFF]/95 dark:bg-[#161B22]/95 p-1 rounded-xl shadow-sm">
+            {/* Phones: one compact menu instead of three buttons (they collided with Tour/fullscreen). */}
+            <label className="sm:hidden flex items-center gap-1 bg-[#FFFFFF]/95 dark:bg-[#161B22]/95 pl-2 pr-1 rounded-xl shadow-sm">
+              <Layers className="w-3.5 h-3.5 text-[#64748B]" strokeWidth={1.75} aria-hidden="true" />
+              <span className="sr-only">Tipo de mapa</span>
+              <select
+                value={baseLayer}
+                onChange={(e) => setBaseLayer(e.target.value as BaseLayerId)}
+                className="h-9 bg-transparent text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] focus:outline-none cursor-pointer"
+              >
+                {BASE_LAYERS.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="hidden sm:flex items-center gap-1 bg-[#FFFFFF]/95 dark:bg-[#161B22]/95 p-1 rounded-xl shadow-sm">
               <Layers className="w-3.5 h-3.5 mx-1 text-[#64748B]" strokeWidth={1.75} aria-hidden="true" />
               {BASE_LAYERS.map((l) => (
                 <button
@@ -577,7 +593,8 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
               className="bg-[#0F172A]/80 text-[#F8FAFC] font-mono text-[11px] px-2 py-1 rounded-md tabular-nums"
               aria-live="off"
             >
-              Passe o cursor ou clique no mapa
+              <span className="hidden [@media(hover:hover)]:inline">Passe o cursor ou clique no mapa</span>
+              <span className="[@media(hover:hover)]:hidden">Toque no mapa para analisar um ponto</span>
             </div>
           </div>
         </div>

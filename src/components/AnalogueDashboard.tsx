@@ -414,12 +414,12 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full sm:shrink-0">
             <select
               aria-label="Escolher referência de comparação nos gráficos"
               value={compareSiteId}
               onChange={(e) => setCompareSiteId(e.target.value)}
-              className="bg-[#F1F5F9] dark:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] cursor-pointer"
+              className="w-full sm:w-auto min-w-0 max-w-full min-h-[40px] bg-[#F1F5F9] dark:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] cursor-pointer"
             >
               {sites.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -939,7 +939,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           </div>
 
           <div className="text-[11px] text-[#475569] dark:text-[#94A3B8] bg-[#F8FAFC] dark:bg-[#0D1117] px-3 py-2 rounded-xl">
-            Legenda: passe o mouse sobre uma cor ou nome para destacar sua parte no gráfico.
+            Legenda: toque ou passe o rato sobre uma cor ou nome para destacar a sua parte no gráfico.
           </div>
         </div>
 
@@ -1048,23 +1048,23 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
             ) : (
               <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg">
-                Passe o mouse nos pontos da linha
+                Toque ou passe o rato nos pontos
               </span>
             )}
           </div>
 
           <div className="w-full overflow-x-auto bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-3">
-            <svg viewBox="0 0 510 182" className="w-full min-w-[380px] h-auto" role="img" aria-label="Gráfico de linhas comparando reflexo de luz">
+            <svg viewBox="0 0 510 182" className="w-full h-auto" role="img" aria-label="Gráfico de linhas comparando reflexo de luz">
               <rect x={mapX(400)} y="8" width={mapX(700) - mapX(400)} height="144" className="fill-[#1E3A8A]/5 dark:fill-[#60A5FA]/5" />
               <rect x={mapX(1400)} y="8" width={mapX(2500) - mapX(1400)} height="144" className="fill-[#0F766E]/5 dark:fill-[#2DD4BF]/5" />
 
-              <text x={(mapX(400) + mapX(700)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] font-sans">
+              <text x={(mapX(400) + mapX(700)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] max-sm:text-[14px] font-sans">
                 Luz Visível
               </text>
-              <text x={(mapX(700) + mapX(1400)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] font-sans">
+              <text x={(mapX(700) + mapX(1400)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] max-sm:text-[14px] font-sans">
                 Ferro / Rocha
               </text>
-              <text x={(mapX(1400) + mapX(2500)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] font-sans">
+              <text x={(mapX(1400) + mapX(2500)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] max-sm:text-[14px] font-sans">
                 Água / Sais / Argila
               </text>
 
@@ -1073,7 +1073,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                 return (
                   <g key={val}>
                     <line x1="42" y1={y} x2="492" y2={y} className="stroke-[#E2E8F0] dark:stroke-[#30363D]" strokeWidth="1" />
-                    <text x="34" y={y + 3} textAnchor="end" className="fill-[#64748B] dark:fill-[#8B949E] text-[9px] font-mono">
+                    <text x="34" y={y + 3} textAnchor="end" className="fill-[#64748B] dark:fill-[#8B949E] text-[9px] max-sm:text-[14px] font-mono">
                       {(val * 100).toFixed(0)}%
                     </text>
                   </g>
@@ -1085,8 +1085,8 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                   key={wl}
                   x={mapX(wl)}
                   y="170"
-                  textAnchor="middle"
-                  className="fill-[#64748B] dark:fill-[#8B949E] text-[9px] font-mono"
+                  textAnchor={wl === 2500 ? "end" : wl === 400 ? "start" : "middle"}
+                  className="fill-[#64748B] dark:fill-[#8B949E] text-[9px] max-sm:text-[14px] font-mono"
                 >
                   {wl} nm
                 </text>
