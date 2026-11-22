@@ -1,3 +1,5 @@
+import { getMineralLabel, getSiteText } from '../data/siteTranslations';
+import { useI18n } from '../i18n';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnalogueSite, CollaboratorProfile, GeologicalSample, LatestAiAnalysisSnapshot, PlanetaryTarget, UnmeasuredField } from '../types';
 import { INITIAL_SAMPLES } from '../data/planetaryData';
@@ -212,6 +214,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   saveState,
   isSignedIn = false,
 }) => {
+  const { t, lang } = useI18n();
   // --- Unified Left Panel Mode: Manual Data Entry (Primary) | AI Copilot | Computer Vision Copilot ---
   const [inputMode, setInputMode] = useState<'prompt_doc' | 'data_form' | 'vision'>('data_form');
 
@@ -291,7 +294,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       targetPlanet,
       sites.find((s) => s.id === siteId) || selectedSite
     );
-  }, [targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals, unmeasuredList, siteId, sites, selectedSite]);
+  }, [targetPlanet, waterActivity, pH, depthCm, porosityPercent, minerals, unmeasuredList, siteId, sites, selectedSite, lang]);
 
   // --- Computer Vision & Real-Time Camera + TIFF / Encrypted Image States ---
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -392,10 +395,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       s.name.toLowerCase().includes(q) ||
       s.country.toLowerCase().includes(q) ||
       s.region.toLowerCase().includes(q) ||
-      s.targetPlanet.toLowerCase().includes(q) ||
-      s.primaryMinerals.some((m) => m.toLowerCase().includes(q))
+      getCelestialBodyLabel(s.targetPlanet).toLowerCase().includes(q) ||
+      (['name', 'country', 'region'] as const).some((field) => getSiteText(s, field).toLowerCase().includes(q)) ||
+      s.primaryMinerals.some((m) => m.toLowerCase().includes(q) || getMineralLabel(m).toLowerCase().includes(q))
     );
-  }), [sites, filterRegionOrPlanet, siteSearchQuery]);
+  }), [sites, filterRegionOrPlanet, siteSearchQuery, lang]);
 
   const handleMapSelectSite = useCallback(
     (site: AnalogueSite) => {
@@ -447,7 +451,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
-      setGpsNote('Geolocalização não suportada neste navegador.');
+      setGpsNote(t("Geolocalização não suportada neste navegador.", "This browser does not support geolocation."));
       return;
     }
 
@@ -532,7 +536,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const handleRunResearchChat = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!researchPrompt.trim() && !attachedDocContent) {
-      setChatError('Escreva uma pergunta/descrição ou anexe um arquivo CSV/TXT/JSON para análise.');
+      setChatError(t("Escreva uma pergunta/descrição ou anexe um arquivo CSV/TXT/JSON para análise.", "Enter a question or description, or attach a CSV, TXT or JSON file for analysis."));
       return;
     }
 
@@ -559,6 +563,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lang,
           messages: nextHistory.map((m) => ({ role: m.role, content: m.content })),
           prompt: userText,
           documentContent: attachedDocContent,
@@ -581,7 +586,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         ...nextHistory,
         {
           role: 'model',
-          content: data.reply || 'Análise concluída.',
+          content: data.reply || t("Análise concluída.", "Analysis complete."),
           reasoning: data.reasoning || undefined,
         },
       ]);
@@ -706,7 +711,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       setShowDecryptPanel(true);
       setDecryptError(
         err?.message ||
-          'Arquivo requer chave/senha de descriptografia ou está num formato criptografado não suportado.'
+          t("Arquivo requer chave/senha de descriptografia ou está num formato criptografado não suportado.", "This file requires a decryption key or password, or uses an unsupported encryption format.")
       );
     } finally {
       setIsDecrypting(false);
@@ -768,7 +773,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     setCameraError(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Câmera em tempo real não suportada neste navegador. Utilize o upload de fotografia.');
+      setCameraError(t("Câmera em tempo real não suportada neste navegador. Utilize o upload de fotografia.", "This browser does not support live camera capture. Upload a photo instead."));
       return;
     }
 
@@ -786,7 +791,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
     } catch (err: any) {
       const msg =
         err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError'
-          ? 'Permissão de câmera negada. Autorize o acesso à câmera no navegador para capturar em tempo real.'
+          ? t("Permissão de câmera negada. Autorize o acesso à câmera no navegador para capturar em tempo real.", "Camera access was denied. Allow camera access in your browser to take a photo.")
           : `Não foi possível acessar a câmera (${err?.message || 'dispositivo indisponível'}).`;
       setCameraError(msg);
       setIsCameraOpen(false);
@@ -796,7 +801,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   const handleCaptureCameraFrame = async (analyzeImmediately = false) => {
     const video = videoRef.current;
     if (!video || video.readyState < 2) {
-      setCameraError('Aguardando inicialização da imagem da câmera...');
+      setCameraError(t("Aguardando inicialização da imagem da câmera...", "Waiting for the camera..."));
       return;
     }
 
@@ -835,7 +840,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
   ) => {
     const targetImg = imageOverride || uploadedImage;
     if (!targetImg) {
-      setVisionError('Capture uma imagem pela câmera, carregue um TIFF/GeoTIFF ou descriptografe um arquivo antes de analisar.');
+      setVisionError(t("Capture uma imagem pela câmera, carregue um TIFF/GeoTIFF ou descriptografe um arquivo antes de analisar.", "Take a photo, upload a TIFF or GeoTIFF, or decrypt a file before analysing it."));
       return;
     }
 
@@ -859,6 +864,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lang,
           // The image itself stays in the browser; only measured telemetry is sent.
           coordinates: coordsToUse,
           targetPlanet,
@@ -894,7 +900,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             : undefined,
       });
     } catch (err: any) {
-      setVisionError(err.message || 'Falha ao executar análise visual com o copiloto.');
+      setVisionError(err.message || t("Falha ao executar análise visual com o copiloto.", "Visual analysis failed."));
     } finally {
       setIsAnalyzingVision(false);
     }
@@ -908,69 +914,69 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           {
             id: 'selected_target_match' as DiagnosticPathway,
             category: getCelestialBodyLabel(activeSample.targetPlanet),
-            title: `Comparar com ${activeTargetLabel}`,
-            description: `Avalia os dados manuais, minerais e ambiente da amostra para o estudo de ${activeTargetLabel}.`,
+            title: t(`Comparar com ${activeTargetLabel}`, `Compare with ${activeTargetLabel}`),
+            description: t(`Avalia os dados manuais, minerais e ambiente da amostra para o estudo de ${activeTargetLabel}.`, `Assesses the sample data, minerals and environment as an analogue for ${activeTargetLabel}.`),
             primary: true,
           },
         ]
       : []),
     {
       id: 'mars_jezero_match',
-      category: 'Marte',
-      title: 'Comparar com Marte',
-      description: 'Verifica se o solo e os minerais combinam com antigas regiões de água em Marte.',
+      category: t('Marte', 'Mars'),
+      title: t("Comparar com Marte", "Compare with Mars"),
+      description: t("Verifica se o solo e os minerais combinam com antigas regiões de água em Marte.", "Checks whether the soil and minerals resemble ancient water-rich regions on Mars."),
       primary: true,
     },
     {
       id: 'moon_shackleton_match',
-      category: 'Lua',
-      title: 'Comparar com a Lua',
-      description: 'Avalia se o terreno se parece com crateras e poeira lunar para futuras bases.',
+      category: t('Lua', 'Moon'),
+      title: t("Comparar com a Lua", "Compare with the Moon"),
+      description: t("Avalia se o terreno se parece com crateras e poeira lunar para futuras bases.", "Assesses whether the terrain resembles lunar craters and dust at potential base sites."),
       primary: true,
     },
     {
       id: 'extremophile_biosignature',
-      category: 'Vida & Água',
-      title: 'Chance de Água e Vida',
-      description: 'Analisa condições de umidade, sais e proteção contra o sol para vida microscópica.',
+      category: t("Vida & Água", "Life and Water"),
+      title: t("Chance de Água e Vida", "Potential for Water and Life"),
+      description: t("Analisa condições de umidade, sais e proteção contra o sol para vida microscópica.", "Examines moisture, salts and shielding from sunlight as conditions for microbial life."),
       primary: true,
     },
     {
       id: 'isru_resource_detection',
-      category: 'Recursos',
-      title: 'Recursos Úteis no Local',
-      description: 'Estima se é possível extrair água ou oxigênio das rochas e do solo.',
+      category: t("Recursos", "Resources"),
+      title: t("Recursos Úteis no Local", "Useful Local Resources"),
+      description: t("Estima se é possível extrair água ou oxigênio das rochas e do solo.", "Estimates whether water or oxygen could be extracted from the rock and soil."),
       primary: true,
     },
     {
       id: 'europa_ice_brine_match',
       category: 'Europa',
-      title: 'Lua gelada Europa',
-      description: 'Compara sais e crostas minerais com oceanos congelados de Júpiter.',
+      title: t("Lua gelada Europa", "Europa’s Icy Surface"),
+      description: t("Compara sais e crostas minerais com oceanos congelados de Júpiter.", "Compares salts and mineral crusts with the icy ocean worlds of Jupiter."),
     },
     {
       id: 'enceladus_serpentine_plume',
-      category: 'Encélado',
-      title: 'Plumas de Encélado',
-      description: 'Avalia fontes minerais alcalinas semelhantes às de Encélado em Saturno.',
+      category: t('Encélado', 'Enceladus'),
+      title: t("Plumas de Encélado", "Enceladus’s Plumes"),
+      description: t("Avalia fontes minerais alcalinas semelhantes às de Encélado em Saturno.", "Assesses alkaline mineral sources comparable to those on Saturn’s moon Enceladus."),
     },
     {
       id: 'titan_hydrocarbon_dune',
-      category: 'Titã',
-      title: 'Dunas de Titã',
-      description: 'Compara dunas e ventos com a maior lua de Saturno.',
+      category: t('Titã', 'Titan'),
+      title: t("Dunas de Titã", "Titan’s Dunes"),
+      description: t("Compara dunas e ventos com a maior lua de Saturno.", "Compares dunes and winds with those on Saturn’s largest moon."),
     },
     {
       id: 'venus_supercritical_volcano',
-      category: 'Vênus',
-      title: 'Vulcões de Vênus',
-      description: 'Avalia rochas vulcânicas submetidas a calor e pressão extremos.',
+      category: t('Vênus', 'Venus'),
+      title: t("Vulcões de Vênus", "Volcanoes of Venus"),
+      description: t("Avalia rochas vulcânicas submetidas a calor e pressão extremos.", "Assesses volcanic rocks exposed to extreme heat and pressure."),
     },
     {
       id: 'rover_instrument_simulation',
-      category: 'Sondas NASA',
-      title: 'Simulação de Sonda NASA',
-      description: 'Mostra o que os sensores de um robô espacial detectariam neste lugar.',
+      category: t("Sondas NASA", "NASA Spacecraft"),
+      title: t("Simulação de Sonda NASA", "NASA Instrument Simulation"),
+      description: t("Mostra o que os sensores de um robô espacial detectariam neste lugar.", "Shows what a robotic spacecraft’s instruments might detect at this site."),
     },
   ];
 
@@ -983,6 +989,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lang,
           action: selectedPathway,
           sample: activeSample,
           site: selectedSite,
@@ -1005,7 +1012,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         diagnosticResult: data.result,
       });
     } catch (err: any) {
-      setDiagError(err.message || 'Falha ao executar diagnóstico do copiloto IA.');
+      setDiagError(err.message || t("Falha ao executar diagnóstico do copiloto IA.", "The AI copilot could not complete the diagnostic."));
     } finally {
       setIsDiagLoading(false);
     }
@@ -1032,6 +1039,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lang,
           sample: activeSample,
           site: selectedSite,
           visionData: visionResult,
@@ -1086,10 +1094,10 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
       <div className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors duration-150">
         <div className="space-y-1">
           <h1 className="font-poppins text-2xl sm:text-[28px] font-bold text-[#0F172A] dark:text-[#F0F6FC] tracking-tight">
-            Pesquisa
+            {t("Pesquisa", "Research")}
           </h1>
           <p className="text-sm text-[#475569] dark:text-[#94A3B8] max-w-2xl leading-relaxed">
-            Explore lugares da Terra parecidos com outros planetas usando perguntas, fotos, dados simples ou o mapa.
+            {t("Explore lugares da Terra parecidos com outros planetas usando perguntas, fotos, dados simples ou o mapa.", "Explore places on Earth that resemble other planets using questions, photos, simple data or the map.")}
           </p>
         </div>
 
@@ -1100,12 +1108,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             className="min-h-[40px] py-2 px-3.5 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl transition-colors duration-150 flex items-center gap-2 cursor-pointer whitespace-nowrap"
           >
             <Satellite className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-            <span>Fontes da NASA</span>
+            <span>{t("Fontes da NASA", "NASA Sources")}</span>
           </button>
 
           <label className="min-h-[40px] py-2 px-3.5 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl transition-colors duration-150 flex items-center gap-2 cursor-pointer whitespace-nowrap">
             <Upload className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-            <span>Importar Planilha</span>
+            <span>{t("Importar Planilha", "Import Spreadsheet")}</span>
             <input type="file" accept=".csv,.json" onChange={handleBulkDataUpload} className="sr-only" />
           </label>
 
@@ -1120,7 +1128,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             ) : (
               <MapPin className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
             )}
-            <span>{gpsLoading ? 'Localizando...' : 'Minha Localização'}</span>
+            <span>{gpsLoading ? t("Localizando...", "Finding location...") : t("Minha Localização", "My Location")}</span>
           </button>
 
           <button
@@ -1130,7 +1138,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             className="min-h-[40px] py-2 px-4 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] disabled:opacity-50 text-[#FFFFFF] text-xs font-medium rounded-xl transition-colors duration-150 flex items-center gap-2 cursor-pointer whitespace-nowrap"
           >
             <FileText className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-            <span>{isGeneratingReport ? 'Criando resumo...' : 'Criar Resumo'}</span>
+            <span>{isGeneratingReport ? t("Criando resumo...", "Creating summary...") : t("Criar Resumo", "Create Summary")}</span>
           </button>
         </div>
       </div>
@@ -1144,7 +1152,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <MapPin className="w-3.5 h-3.5 text-[#15803D] dark:text-[#4ADE80]" strokeWidth={1.75} aria-hidden="true" />
                 {currentCoords && (
                   <span>
-                    Sua localização:{' '}
+                    {t("Sua localização:", "Your location:")}{' '}
                     <strong className="font-mono tabular-nums">
                       {currentCoords.lat}°, {currentCoords.lng}°
                     </strong>
@@ -1199,7 +1207,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <h2 id="unified-input-heading" className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                  Dados da Pesquisa &amp; Copiloto
+                  {t("Dados da Pesquisa & Copiloto", "Research Data & Copilot")}
                 </h2>
                 <span
                   className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg cursor-help"
@@ -1214,7 +1222,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 </span>
               </div>
               <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
-                Você insere os dados manualmente; a IA atua apenas como copiloto para analisar.
+                {t("Você insere os dados manualmente; a IA atua apenas como copiloto para analisar.", "Enter your data manually. The AI copilot helps you analyse it.")}
               </p>
               {isExampleSample && (
                 <div
@@ -1222,7 +1230,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   className="mt-2 flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-xs text-[#92400E] dark:text-[#FCD34D]"
                 >
                   <span>
-                    <strong>Está a ver um exemplo</strong> com dados fictícios. Os seus dados começam com uma análise nova.
+                    <strong>{t("Está a ver um exemplo", "You’re viewing an example")}</strong> com dados fictícios. Os seus dados começam com uma análise nova.
                   </span>
                   {onStartNewAnalysis && (
                     <button
@@ -1230,13 +1238,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       onClick={onStartNewAnalysis}
                       className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-semibold shadow-xs cursor-pointer"
                     >
-                      Começar do zero
+                      {t("Começar do zero", "Start from scratch")}
                     </button>
                   )}
                 </div>
               )}
               <details className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
-                <summary className="cursor-pointer select-none">Como a semelhança é calculada</summary>
+                <summary className="cursor-pointer select-none">{t("Como a semelhança é calculada", "How similarity is calculated")}</summary>
                 <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
                   {liveAFI.notes.map((note) => (
                     <li key={note}>{note}</li>
@@ -1248,7 +1256,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             {/* Segmented Switcher: Manual Data First + AI Copilot + Vision Copilot */}
             <div
               role="tablist"
-              aria-label="Entrada manual e copiloto de análise"
+              aria-label={t("Entrada manual e copiloto de análise", "Manual data entry and analysis copilot")}
               className="grid grid-cols-3 gap-1.5 p-1.5 bg-[#F1F5F9] dark:bg-[#0D1117] rounded-xl"
             >
               <button
@@ -1263,7 +1271,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <Database className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                <span className="truncate"><span className="sm:hidden">Dados</span><span className="hidden sm:inline">Dados Manuais</span></span>
+                <span className="truncate"><span className="sm:hidden">{t("Dados", "Data")}</span><span className="hidden sm:inline">{t("Dados Manuais", "Manual Data")}</span></span>
               </button>
 
               <button
@@ -1278,7 +1286,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <MessageSquareText className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                <span className="truncate"><span className="sm:hidden">IA</span><span className="hidden sm:inline">Copiloto IA</span></span>
+                <span className="truncate"><span className="sm:hidden">{t("IA", "AI")}</span><span className="hidden sm:inline">{t("Copiloto IA", "AI Copilot")}</span></span>
               </button>
 
               <button
@@ -1293,14 +1301,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <Camera className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                <span className="truncate"><span className="sm:hidden">Foto</span><span className="hidden sm:inline">Foto / Câmera</span></span>
+                <span className="truncate"><span className="sm:hidden">{t("Foto", "Photo")}</span><span className="hidden sm:inline">{t("Foto / Câmera", "Photo / Camera")}</span></span>
               </button>
             </div>
 
             {/* Target Planet & Natural Satellite Dropdown Selector */}
             <div className="space-y-1.5">
               <label htmlFor="u-target-planet-select" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block">
-                Comparar com qual planeta ou satélite natural?
+                {t("Comparar com qual planeta ou satélite natural?", "Which planet or moon would you like to compare with?")}
               </label>
               <select
                 id="u-target-planet-select"
@@ -1308,21 +1316,21 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 onChange={(e) => setTargetPlanet(e.target.value as PlanetaryTarget)}
                 className="w-full min-h-[40px] bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm font-medium px-3.5 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] cursor-pointer"
               >
-                <optgroup label="Planetas do Sistema Solar">
+                <optgroup label={t("Planetas do Sistema Solar", "Solar System Planets")}>
                   {PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
                       {bodyOptionLabel(b)}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Planetas Anões">
+                <optgroup label={t("Planetas Anões", "Dwarf Planets")}>
                   {DWARF_PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
                       {bodyOptionLabel(b)}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Satélites Naturais (Luas)">
+                <optgroup label={t("Satélites Naturais (Luas)", "Natural Satellites (Moons)")}>
                   {SATELLITE_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
                       {bodyOptionLabel(b)}
@@ -1353,7 +1361,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                      Anexar documento ou planilha (opcional)
+                      {t("Anexar documento ou planilha (opcional)", "Attach a document or spreadsheet (optional)")}
                     </span>
                     {attachedDocName && (
                       <button
@@ -1365,7 +1373,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         className="text-xs text-[#B91C1C] dark:text-[#F87171] hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                        <span>Remover</span>
+                        <span>{t("Remover", "Remove")}</span>
                       </button>
                     )}
                   </div>
@@ -1379,7 +1387,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           : 'Escolher arquivo (.CSV, .JSON ou texto)'}
                       </span>
                     </div>
-                    <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] shrink-0">Escolher</span>
+                    <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] shrink-0">{t("Escolher", "Choose")}</span>
                     <input type="file" accept=".csv,.json,.txt,.md,.tsv" onChange={handleDocumentUploadSafe(handleDocumentAttach)} className="sr-only" />
                   </label>
                   <button
@@ -1388,20 +1396,20 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:underline inline-flex items-center gap-1 cursor-pointer"
                   >
                     <Satellite className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
-                    <span>Não tem planilha? Ver onde baixar dados CSV/JSON da NASA</span>
+                    <span>{t("Não tem planilha? Ver onde baixar dados CSV/JSON da NASA", "Need a spreadsheet? Find NASA CSV and JSON data")}</span>
                   </button>
                 </div>
 
                 <div className="space-y-1.5">
                   <label htmlFor="unified-prompt" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block">
-                    Sua pergunta ou ideia de pesquisa
+                    {t("Sua pergunta ou ideia de pesquisa", "Your research question or idea")}
                   </label>
                   <textarea
                     id="unified-prompt"
                     rows={3}
                     value={researchPrompt}
                     onChange={(e) => setResearchPrompt(e.target.value)}
-                    placeholder="Ex.: Por que este lugar na África se parece com Marte? Que rochas existem aqui?"
+                    placeholder={t("Ex.: Por que este lugar na África se parece com Marte? Que rochas existem aqui?", "E.g. Why does this site in Africa resemble Mars? What rocks are found here?")}
                     className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] dark:placeholder:text-[#6E7681] text-sm p-3 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
                   />
                 </div>
@@ -1425,14 +1433,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         }`}
                       >
                         <div className="text-[11px] font-semibold text-[#1E3A8A] dark:text-[#60A5FA] mb-1">
-                          {msg.role === 'user' ? 'Você' : 'Copiloto IA (Apoio à Análise)'}
+                          {msg.role === 'user' ? t("Você", "You") : t("Copiloto IA (Apoio à Análise)", "AI Copilot")}
                           {msg.attachmentName ? ` · ${msg.attachmentName}` : ''}
                         </div>
                         {msg.content}
                         {msg.reasoning && (
                           <details className="mt-2 pt-1.5 text-[11px] text-[#475569] dark:text-[#94A3B8]">
                             <summary className="cursor-pointer font-medium hover:text-[#0F172A] dark:hover:text-[#F0F6FC] select-none">
-                              Ver raciocínio da IA
+                              {t("Ver raciocínio da IA", "View AI reasoning")}
                             </summary>
                             <div className="mt-1 whitespace-pre-wrap opacity-90">{msg.reasoning}</div>
                           </details>
@@ -1451,12 +1459,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 {isChatLoading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
-                    <span>Analisando...</span>
+                    <span>{t("Analisando...", "Analysing...")}</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-                    <span>{chatHistory.length > 0 ? 'Enviar Nova Pergunta' : 'Perguntar e Analisar'}</span>
+                    <span>{chatHistory.length > 0 ? t("Enviar Nova Pergunta", "Send Another Question") : t("Perguntar e Analisar", "Ask and Analyse")}</span>
                   </>
                 )}
               </button>
@@ -1469,14 +1477,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               <div className="space-y-3">
                 <div>
                   <label htmlFor="u-sample-name" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                    Nome do Lugar ou Amostra
+                    {t("Nome do Lugar ou Amostra", "Site or Sample Name")}
                   </label>
                   <input
                     id="u-sample-name"
                     type="text"
                     value={sampleName}
                     onChange={(e) => setSampleName(e.target.value)}
-                    placeholder="Ex.: Solo Salino de Danakil"
+                    placeholder={t("Ex.: Solo Salino de Danakil", "E.g. Danakil Saline Soil")}
                     className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                   />
                 </div>
@@ -1484,7 +1492,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
                     <label htmlFor="u-collector" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                      Seu Nome ou Equipe
+                      {t("Seu Nome ou Equipe", "Your Name or Team")}
                     </label>
                     <input
                       id="u-collector"
@@ -1496,7 +1504,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   </div>
                   <div>
                     <label htmlFor="u-site" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                      Lugar da Coleta (escreva manualmente) *
+                      {t("Lugar da Coleta (escreva manualmente) *", "Sampling Location (enter manually) *")}
                     </label>
                     <input
                       id="u-site"
@@ -1513,13 +1521,13 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           onSelectSite(found);
                         }
                       }}
-                      placeholder="Ex.: Deserto do Namibe, Angola"
+                      placeholder={t("Ex.: Deserto do Namibe, Angola", "E.g. Namib Desert, Angola")}
                       className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                     />
                     <datalist id="u-site-suggestions">
                       {sites.map((s) => (
                         <option key={s.id} value={s.name}>
-                          {s.country} · {s.targetPlanet}
+                          {getSiteText(s, 'country')} · {getSiteText(s, 'name')} · {getCelestialBodyLabel(s.targetPlanet)}
                         </option>
                       ))}
                     </datalist>
@@ -1528,21 +1536,21 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
                 <div>
                   <label htmlFor="u-notes" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                    O que você observou?
+                    {t("O que você observou?", "What did you observe?")}
                   </label>
                   <textarea
                     id="u-notes"
                     rows={2}
                     value={fieldNotes}
                     onChange={(e) => setFieldNotes(e.target.value)}
-                    placeholder="Ex.: Solo muito seco e avermelhado, com cristais brancos..."
+                    placeholder={t("Ex.: Solo muito seco e avermelhado, com cristais brancos...", "E.g. Very dry reddish soil with white crystals...")}
                     className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs p-3 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
                   />
                 </div>
 
                 <div className="bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-3 space-y-3">
                   <div className="text-xs font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">
-                    Medidas Manuais de Solo &amp; Minerais
+                    {t("Medidas Manuais de Solo & Minerais", "Manual Soil and Mineral Measurements")}
                   </div>
 
                   <div className="space-y-3">
@@ -1555,7 +1563,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <label htmlFor="u-source" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                          Origem dos Dados
+                          {t("Origem dos Dados", "Data Source")}
                         </label>
                         <button
                           type="button"
@@ -1563,7 +1571,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:underline inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Satellite className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
-                          <span>Não tem dados? Achar fontes NASA</span>
+                          <span>{t("Não tem dados? Achar fontes NASA", "Need data? Find NASA sources")}</span>
                         </button>
                       </div>
                       <input
@@ -1577,8 +1585,8 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div>
-                        <label htmlFor="u-aw" title="Atividade de água: 0 = totalmente seco, 1 = água pura" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1 cursor-help">
-                          Água (aw, 0–1)
+                        <label htmlFor="u-aw" title={t("Atividade de água: 0 = totalmente seco, 1 = água pura", "Water activity: 0 = completely dry, 1 = pure water")} className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1 cursor-help">
+                          {t("Água (aw, 0–1)", "Water (aw, 0–1)")}
                         </label>
                         <input
                           id="u-aw"
@@ -1587,7 +1595,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           min="0"
                           max="1"
                           value={unmeasuredNow.has('waterActivity') ? '' : waterActivity}
-                          placeholder="não medido"
+                          placeholder={t("não medido", "not measured")}
                           onChange={(e) => {
                             const v = e.target.value;
                             setFieldMeasured('waterActivity', v !== '');
@@ -1598,7 +1606,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       </div>
                       <div>
                         <label htmlFor="u-ph" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                          Acidez (pH)
+                          {t("Acidez (pH)", "Acidity (pH)")}
                         </label>
                         <input
                           id="u-ph"
@@ -1607,7 +1615,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           min="0"
                           max="14"
                           value={unmeasuredNow.has('pH') ? '' : pH}
-                          placeholder="não medido"
+                          placeholder={t("não medido", "not measured")}
                           onChange={(e) => {
                             const v = e.target.value;
                             setFieldMeasured('pH', v !== '');
@@ -1618,14 +1626,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       </div>
                       <div>
                         <label htmlFor="u-depth" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                          Profund. (cm)
+                          {t("Profund. (cm)", "Depth (cm)")}
                         </label>
                         <input
                           id="u-depth"
                           type="number"
                           step="0.5"
                           value={unmeasuredNow.has('depthCm') ? '' : depthCm}
-                          placeholder="não medido"
+                          placeholder={t("não medido", "not measured")}
                           onChange={(e) => {
                             const v = e.target.value;
                             setFieldMeasured('depthCm', v !== '');
@@ -1636,14 +1644,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       </div>
                       <div>
                         <label htmlFor="u-porosity" className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] block mb-1">
-                          Porosid. (%)
+                          {t("Porosid. (%)", "Porosity (%)")}
                         </label>
                         <input
                           id="u-porosity"
                           type="number"
                           step="0.5"
                           value={unmeasuredNow.has('porosityPercent') ? '' : porosityPercent}
-                          placeholder="não medido"
+                          placeholder={t("não medido", "not measured")}
                           onChange={(e) => {
                             const v = e.target.value;
                             setFieldMeasured('porosityPercent', v !== '');
@@ -1671,7 +1679,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     className="min-h-[42px] py-2 px-4 bg-[#0F766E] dark:bg-[#0D9488] hover:bg-[#0D9488] text-[#FFFFFF] text-xs font-medium rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                   >
                     <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    <span>Escrever artigo</span>
+                    <span>{t("Escrever artigo", "Write article")}</span>
                   </button>
                 )}
               </div>
@@ -1695,12 +1703,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     }`}
                   >
                     <Video className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                    <span>{isCameraOpen ? 'Fechar Câmera' : 'Câmera ao Vivo'}</span>
+                    <span>{isCameraOpen ? t("Fechar Câmera", "Close Camera") : t("Câmera ao Vivo", "Live Camera")}</span>
                   </button>
 
                   <label className="min-h-[38px] py-2 px-3 bg-[#F1F5F9] dark:bg-[#0D1117] hover:bg-[#E2E8F0] dark:hover:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer">
                     <Upload className="w-3.5 h-3.5 shrink-0 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                    <span>Enviar Foto ou Arquivo</span>
+                    <span>{t("Enviar Foto ou Arquivo", "Upload Photo or File")}</span>
                     <input
                       type="file"
                       accept="image/*,.tif,.tiff,.geotiff,.enc,.aes,.bin,.dat,.pgp,.asc,.b64,.crypt,.json"
@@ -1716,7 +1724,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
                         <Lock className="w-3.5 h-3.5 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                        <span>Arquivo protegido por senha</span>
+                        <span>{t("Arquivo protegido por senha", "Password-protected file")}</span>
                       </div>
                       <button
                         type="button"
@@ -1725,7 +1733,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           setPendingEncryptedFile(null);
                           setDecryptError(null);
                         }}
-                        aria-label="Fechar painel de senha"
+                        aria-label={t("Fechar painel de senha", "Close password panel")}
                         className="p-1 text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC] rounded-lg cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -1740,20 +1748,20 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
                     <div className="relative">
                       <label htmlFor="decrypt-secret" className="sr-only">
-                        Senha ou chave para abrir a imagem
+                        {t("Senha ou chave para abrir a imagem", "Password or key to open the image")}
                       </label>
                       <input
                         id="decrypt-secret"
                         type={showDecryptKey ? 'text' : 'password'}
                         value={decryptKey}
                         onChange={(e) => setDecryptKey(e.target.value)}
-                        placeholder="Digite a senha para abrir o arquivo..."
+                        placeholder={t("Digite a senha para abrir o arquivo...", "Enter the password to open the file...")}
                         className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs pl-3 pr-9 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                       />
                       <button
                         type="button"
                         onClick={() => setShowDecryptKey((prev) => !prev)}
-                        aria-label={showDecryptKey ? 'Ocultar senha' : 'Mostrar senha'}
+                        aria-label={showDecryptKey ? t("Ocultar senha", "Hide password") : t("Mostrar senha", "Show password")}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC] cursor-pointer"
                       >
                         {showDecryptKey ? (
@@ -1766,11 +1774,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
                     <details className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
                       <summary className="cursor-pointer hover:text-[#0F172A] dark:hover:text-[#F0F6FC] select-none">
-                        Opções avançadas de formato
+                        {t("Opções avançadas de formato", "Advanced format options")}
                       </summary>
                       <div className="pt-2">
                         <label htmlFor="decrypt-alg" className="sr-only">
-                          Formato de proteção do arquivo
+                          {t("Formato de proteção do arquivo", "File encryption format")}
                         </label>
                         <select
                           id="decrypt-alg"
@@ -1778,11 +1786,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           onChange={(e) => setDecryptAlgorithm(e.target.value as DecryptionAlgorithm)}
                           className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-2.5 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                         >
-                          <option value="auto">Detectar automaticamente (recomendado)</option>
+                          <option value="auto">{t("Detectar automaticamente (recomendado)", "Detect automatically (recommended)")}</option>
                           <option value="aes_gcm_pbkdf2">AES-256-GCM (PBKDF2)</option>
                           <option value="openssl_aes_cbc">OpenSSL AES-256-CBC</option>
-                          <option value="raw_key_aes_gcm">Chave Hex/Base64 (GCM)</option>
-                          <option value="raw_key_aes_cbc">Chave Hex/Base64 (CBC)</option>
+                          <option value="raw_key_aes_gcm">{t("Chave Hex/Base64 (GCM)", "Hex/Base64 Key (GCM)")}</option>
+                          <option value="raw_key_aes_cbc">{t("Chave Hex/Base64 (CBC)", "Hex/Base64 Key (CBC)")}</option>
                         </select>
                       </div>
                     </details>
@@ -1803,12 +1811,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       {isDecrypting ? (
                         <>
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.75} aria-hidden="true" />
-                          <span>Abrindo imagem...</span>
+                          <span>{t("Abrindo imagem...", "Opening image...")}</span>
                         </>
                       ) : (
                         <>
                           <Unlock className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                          <span>Desbloquear e Abrir Imagem</span>
+                          <span>{t("Desbloquear e Abrir Imagem", "Unlock and Open Image")}</span>
                         </>
                       )}
                     </button>
@@ -1830,11 +1838,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         autoPlay
                         playsInline
                         muted
-                        aria-label="Visualização ao vivo da câmera"
+                        aria-label={t("Visualização ao vivo da câmera", "Live camera preview")}
                         className="w-full h-full object-cover"
                       />
                       <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg bg-[#0F172A]/80 text-[#FFFFFF] text-[10px] font-medium">
-                        AO VIVO
+                        {t("AO VIVO", "LIVE")}
                       </span>
                     </div>
 
@@ -1845,7 +1853,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         className="min-h-[38px] py-2 px-3 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Camera className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                        <span>Tirar Foto</span>
+                        <span>{t("Tirar Foto", "Take Photo")}</span>
                       </button>
 
                       <button
@@ -1855,7 +1863,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         className="min-h-[38px] py-2 px-3 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Cpu className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                        <span>Tirar e Analisar</span>
+                        <span>{t("Tirar e Analisar", "Capture and Analyse")}</span>
                       </button>
                     </div>
                   </div>
@@ -1877,14 +1885,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                           className="inline-flex items-center gap-1 text-[#0F766E] dark:text-[#2DD4BF] font-medium hover:underline"
                         >
                           <Download className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                          <span>Baixar PNG</span>
+                          <span>{t("Baixar PNG", "Download PNG")}</span>
                         </a>
                         <button
                           type="button"
                           onClick={handleOpenCamera}
                           className="text-[#1E3A8A] dark:text-[#60A5FA] font-medium hover:underline cursor-pointer"
                         >
-                          Nova foto
+                          {t("Nova foto", "New photo")}
                         </button>
                       </div>
                     </div>
@@ -1893,7 +1901,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       <details className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] text-[11px]">
                         <summary className="cursor-pointer font-medium text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-1.5 select-none">
                           <FileCode2 className="w-3.5 h-3.5 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                          <span>Detalhes técnicos da imagem ({rasterMetadata.detectedFormat})</span>
+                          <span>{t('Detalhes técnicos da imagem', 'Technical image details')} ({rasterMetadata.detectedFormat})</span>
                         </summary>
                         <div className="pt-2 space-y-1.5">
                           {rasterMetadata.wasEncrypted && (
@@ -1928,7 +1936,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono tabular-nums">
                           <span>Brilho/Albedo: {Math.round(visualTelemetry.brightnessAlbedo * 100)}%</span>
-                          <span>Índice Ferro: {visualTelemetry.ironOxideIndex}</span>
+                          <span>{t('Índice Ferro', 'Iron Index')}: {visualTelemetry.ironOxideIndex}</span>
                           <span>Textura/Contraste: {visualTelemetry.surfaceContrast}</span>
                         </div>
                       </div>
@@ -1936,14 +1944,14 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
                     <div>
                       <label htmlFor="vision-notes" className="sr-only">
-                        Observação rápida sobre a foto
+                        {t("Observação rápida sobre a foto", "Quick note about the photo")}
                       </label>
                       <input
                         id="vision-notes"
                         type="text"
                         value={visualNotes}
                         onChange={(e) => setVisualNotes(e.target.value)}
-                        placeholder="Opcional: descreva o que vê na foto (ex.: rocha porosa vermelha)..."
+                        placeholder={t("Opcional: descreva o que vê na foto (ex.: rocha porosa vermelha)...", "Optional: describe what you see in the photo, such as porous red rock...")}
                         className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] text-xs px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                       />
                     </div>
@@ -1957,10 +1965,10 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     >
                       <Camera className="w-6 h-6 text-[#1E3A8A] dark:text-[#60A5FA] mb-2" strokeWidth={1.75} aria-hidden="true" />
                       <span className="text-sm font-medium text-[#0F172A] dark:text-[#F0F6FC]">
-                        Abrir Câmera ou Enviar Foto
+                        {t("Abrir Câmera ou Enviar Foto", "Open Camera or Upload Photo")}
                       </span>
                       <span className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
-                        Tire foto de uma pedra, solo ou envie fotos e imagens de satélite (incluindo arquivos TIFF ou protegidos por senha).
+                        {t("Tire foto de uma pedra, solo ou envie fotos e imagens de satélite (incluindo arquivos TIFF ou protegidos por senha).", "Photograph a rock or soil sample, or upload photos and satellite images, including TIFF and password-protected files.")}
                       </span>
                     </button>
                     <button
@@ -1969,7 +1977,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:underline inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Satellite className="w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
-                      <span>Sem foto ou mapa GeoTIFF? Ver fontes de imagens da NASA</span>
+                      <span>{t("Sem foto ou mapa GeoTIFF? Ver fontes de imagens da NASA", "Need a photo or GeoTIFF map? Browse NASA imagery sources")}</span>
                     </button>
                   </div>
                 ) : null}
@@ -1984,11 +1992,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 {visionResult && (
                   <div aria-live="polite" className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] space-y-2 text-xs">
                     <div className="text-[11px] font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">
-                      Parecer do Copiloto Visual IA (não altera seus dados manuais)
+                      {t("Parecer do Copiloto Visual IA (não altera seus dados manuais)", "AI Visual Copilot Assessment")}
                     </div>
                     <div className="flex items-center justify-between font-semibold">
                       <span className="text-[#15803D] dark:text-[#4ADE80]">
-                        Sugestão de local parecido: {visionResult.closestAnalogue || 'não indicada pelo modelo'}
+                        {t("Sugestão de local parecido:", "Suggested analogue:")} {visionResult.closestAnalogue || t("não indicada pelo modelo", "not provided by the model")}
                       </span>
                       <span className="font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">
                         {typeof visionResult.fidelityScore === 'number' ? `${visionResult.fidelityScore}%` : '—'}
@@ -1996,7 +2004,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     </div>
                     {visionResult.parsedOk === false && (
                       <div className="text-[#B45309] dark:text-[#FBBF24]">
-                        O modelo não respondeu no formato esperado; veja o texto completo abaixo.
+                        {t("O modelo não respondeu no formato esperado; veja o texto completo abaixo.", "The model returned an unexpected format. Read the full response below.")}
                       </div>
                     )}
                     {visionResult.features?.length > 0 && (
@@ -2010,7 +2018,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       </div>
                     )}
                     <div className="text-[11px] text-[#64748B] dark:text-[#8B949E]">
-                      Base da análise: cores e brilho medidos na foto, metadados e as suas notas. O modelo de IA não vê a imagem.
+                      {t("Base da análise: cores e brilho medidos na foto, metadados e as suas notas. O modelo de IA não vê a imagem.", "The AI uses measured colours and brightness, metadata and your notes.")}
                     </div>
                     {visionResult.diagnosis && (
                       <p className="text-[#0F172A] dark:text-[#E2E8F0] leading-relaxed">
@@ -2031,12 +2039,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                         }}
                         className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#1E3A8A] dark:text-[#60A5FA] font-medium shadow-xs cursor-pointer"
                       >
-                        Usar minerais sugeridos no meu formulário manual
+                        {t("Usar minerais sugeridos no meu formulário manual", "Add suggested minerals to my form")}
                       </button>
                     )}
                     {visionResult.reasoning && (
                       <details className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
-                        <summary className="cursor-pointer font-medium select-none">Ver raciocínio da IA</summary>
+                        <summary className="cursor-pointer font-medium select-none">{t("Ver raciocínio da IA", "View AI reasoning")}</summary>
                         <div className="mt-1 whitespace-pre-wrap">{visionResult.reasoning}</div>
                       </details>
                     )}
@@ -2054,12 +2062,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   {isAnalyzingVision ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
-                      <span>Analisando foto...</span>
+                      <span>{t("Analisando foto...", "Analysing photo...")}</span>
                     </>
                   ) : (
                     <>
                       <Cpu className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-                      <span>Analisar Foto com IA</span>
+                      <span>{t("Analisar Foto com IA", "Analyse Photo with AI")}</span>
                     </>
                   )}
                 </button>
@@ -2070,17 +2078,17 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
         {/* RIGHT BOWL (7 cols): Interactive Map & Selected Site Overview */}
         <section
-          aria-label="Mapa de lugares no mundo"
+          aria-label={t("Mapa de lugares no mundo", "Map of sites around the world")}
           className="lg:col-span-7 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4 transition-colors duration-150"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
                 <Mountain className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                <span>Mapa de Análogos</span>
+                <span>{t("Mapa de Análogos", "Analogue Map")}</span>
               </h2>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5 tabular-nums">
-                {filteredSites.length} de {sites.length} lugares · clique no mapa para analisar qualquer ponto
+                {t(`${filteredSites.length} de ${sites.length} lugares · clique no mapa para analisar qualquer ponto`, `${filteredSites.length} of ${sites.length} sites · select a point on the map to analyse it`)}
               </p>
             </div>
 
@@ -2096,32 +2104,32 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 }`}
               >
                 <Flame className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>{nasaEventsLoading ? 'Carregando NASA...' : 'Eventos NASA'}</span>
+                <span>{nasaEventsLoading ? t("Carregando NASA...", "Loading NASA data...") : t("Eventos NASA", "NASA Events")}</span>
               </button>
 
               <select
-                aria-label="Filtrar lugares no mapa"
+                aria-label={t("Filtrar lugares no mapa", "Filter sites on the map")}
                 value={filterRegionOrPlanet}
                 onChange={(e) => setFilterRegionOrPlanet(e.target.value)}
                 className="bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
               >
-                <option value="ALL">Todos os lugares ({sites.length})</option>
-                <option value="AFRICA">Na África ({sites.filter((s) => s.region === 'África').length})</option>
-                <optgroup label="Planetas">
+                <option value="ALL">{t(`Todos os lugares (${sites.length})`, `All sites (${sites.length})`)}</option>
+                <option value="AFRICA">{t('Na África', 'In Africa')} ({sites.filter((s) => s.region === 'África').length})</option>
+                <optgroup label={t("Planetas", "Planets")}>
                   {PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      Parecidos com {bodyName(b)}
+                      {t('Parecidos com', 'Similar to')} {bodyName(b)}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Planetas Anões">
+                <optgroup label={t("Planetas Anões", "Dwarf Planets")}>
                   {DWARF_PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      Parecidos com {bodyName(b)}
+                      {t('Parecidos com', 'Similar to')} {bodyName(b)}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Satélites Naturais (Luas)">
+                <optgroup label={t("Satélites Naturais (Luas)", "Natural Satellites (Moons)")}>
                   {SATELLITE_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
                       Parecidos com {bodyFullName(b)}
@@ -2148,16 +2156,16 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
               <div>
                 <div className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                  {selectedSite.country} ({selectedSite.region}) · Análogo de {getCelestialBodyLabel(selectedSite.targetPlanet)}
+                  {getSiteText(selectedSite, 'country')} ({getSiteText(selectedSite, 'region')}) · {t('Análogo de', 'Analogue of')} {getCelestialBodyLabel(selectedSite.targetPlanet)}
                 </div>
                 <h3 className="font-poppins text-base sm:text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC] mt-0.5">
-                  {selectedSite.name}
+                  {getSiteText(selectedSite, 'name')}
                 </h3>
               </div>
 
               <div className="text-right shrink-0 bg-[#F1F5F9] dark:bg-[#21262D] px-3 py-1.5 rounded-xl">
-                <div className="text-[11px] text-[#475569] dark:text-[#94A3B8]" title="Estimativa editorial, não medida">
-                  Estimativa do sítio
+                <div className="text-[11px] text-[#475569] dark:text-[#94A3B8]" title={t("Estimativa editorial, não medida", "Editorial estimate")}>
+                  {t("Estimativa do sítio", "Site estimate")}
                 </div>
                 <div className="text-lg font-bold font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">
                   {selectedSite.fidelityScore}%
@@ -2166,31 +2174,31 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             </div>
 
             <p className="text-xs sm:text-sm text-[#475569] dark:text-[#94A3B8] leading-relaxed line-clamp-2">
-              {selectedSite.description}
+              {getSiteText(selectedSite, 'description')}
             </p>
 
             {/* 4 Bento Sub-cells inside Map Compartment */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                <span className="text-[#475569] dark:text-[#94A3B8] block">Altura</span>
+                <span className="text-[#475569] dark:text-[#94A3B8] block">{t("Altura", "Elevation")}</span>
                 <span className="font-mono font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5 block">
                   {selectedSite.elevationMeters} m
                 </span>
               </div>
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                <span className="text-[#475569] dark:text-[#94A3B8] block">Atividade de água</span>
+                <span className="text-[#475569] dark:text-[#94A3B8] block">{t("Atividade de água", "Water activity")}</span>
                 <span className="font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5 block">
                   aw {selectedSite.waterActivityAw} ({selectedSite.waterActivityAw < 0.35 ? 'muito seco' : 'moderado'})
                 </span>
               </div>
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                <span className="text-[#475569] dark:text-[#94A3B8] block">Região</span>
+                <span className="text-[#475569] dark:text-[#94A3B8] block">{t("Região", "Region")}</span>
                 <span className="font-semibold text-[#0F172A] dark:text-[#F0F6FC] truncate block mt-0.5">
-                  {selectedSite.country}
+                  {getSiteText(selectedSite, 'country')}
                 </span>
               </div>
               <div className="p-3 bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl">
-                <span className="text-[#475569] dark:text-[#94A3B8] block">Referência</span>
+                <span className="text-[#475569] dark:text-[#94A3B8] block">{t("Referência", "Reference")}</span>
                 {selectedSite.references[0] ? (
                   <a
                     href={selectedSite.references[0].url}
@@ -2210,7 +2218,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             {selectedSite.references.length > 0 && (
               <details className="text-xs text-[#475569] dark:text-[#94A3B8]">
                 <summary className="cursor-pointer select-none">
-                  Referências científicas ({selectedSite.references.length})
+                  {t("Referências científicas", "Scientific references")} ({selectedSite.references.length})
                 </summary>
                 <ul className="mt-1.5 space-y-1">
                   {selectedSite.references.map((ref) => (
@@ -2223,7 +2231,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   ))}
                 </ul>
                 <p className="mt-1.5 text-[11px]">
-                  A "semelhança" de cada sítio é uma estimativa editorial; a da sua amostra é calculada a partir dos dados que inseriu.
+                  {t("A \"semelhança\" de cada sítio é uma estimativa editorial; a da sua amostra é calculada a partir dos dados que inseriu.", "Site similarity is an editorial estimate. Sample similarity is calculated from the data you enter.")}
                 </p>
               </details>
             )}
@@ -2252,7 +2260,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           <div className="flex items-center justify-between">
             <h2 id="diagnostics-report-heading" className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <Activity className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Copiloto: Análise Rápida</span>
+              <span>{t("Copiloto: Análise Rápida", "Copilot Quick Analysis")}</span>
             </h2>
             <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg">
               {activeSample.targetPlanet}
@@ -2290,7 +2298,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
 
             <details className="rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-3">
               <summary className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer select-none">
-                Mais análises especializadas (outras luas e planetas)
+                {t("Mais análises especializadas (outras luas e planetas)", "More specialised analyses for other moons and planets")}
               </summary>
               <div className="space-y-2 pt-2.5">
                 {pathways
@@ -2340,12 +2348,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               {isDiagLoading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
-                  <span>Analisando...</span>
+                  <span>{t("Analisando...", "Analysing...")}</span>
                 </>
               ) : (
                 <>
                   <Cpu className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-                  <span>Analisar Agora</span>
+                  <span>{t("Analisar Agora", "Analyse Now")}</span>
                 </>
               )}
             </button>
@@ -2355,7 +2363,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <div>{diagnosticResult}</div>
                 {diagReasoning && (
                   <details className="text-[11px] text-[#475569] dark:text-[#94A3B8] pt-1">
-                    <summary className="cursor-pointer font-medium select-none">Ver raciocínio da IA</summary>
+                    <summary className="cursor-pointer font-medium select-none">{t("Ver raciocínio da IA", "View AI reasoning")}</summary>
                     <div className="mt-1 whitespace-pre-wrap">{diagReasoning}</div>
                   </details>
                 )}
@@ -2372,7 +2380,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 Atualizado em {documentDate}
               </div>
               <h2 className="font-poppins text-base sm:text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                Resumo &amp; Conclusão da Pesquisa
+                {t("Resumo & Conclusão da Pesquisa", "Research Summary and Conclusion")}
               </h2>
             </div>
 
@@ -2385,12 +2393,12 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
               {isGeneratingReport ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.75} aria-hidden="true" />
-                  <span>Escrevendo...</span>
+                  <span>{t("Escrevendo...", "Writing...")}</span>
                 </>
               ) : (
                 <>
                   <FileText className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-                  <span>{reportText ? 'Atualizar Resumo' : 'Criar Resumo Completo'}</span>
+                  <span>{reportText ? t("Atualizar Resumo", "Update Summary") : t("Criar Resumo Completo", "Create Full Summary")}</span>
                 </>
               )}
             </button>
@@ -2421,7 +2429,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     className="min-h-[38px] flex items-center gap-1.5 py-1.5 px-3 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl cursor-pointer"
                   >
                     {copiedReport ? <Check className="w-3.5 h-3.5 text-[#15803D]" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedReport ? 'Copiado' : 'Copiar'}</span>
+                    <span>{copiedReport ? t("Copiado", "Copied") : t("Copiar", "Copy")}</span>
                   </button>
 
                   <button
@@ -2430,7 +2438,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     className="min-h-[38px] flex items-center gap-1.5 py-1.5 px-3 bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Baixar</span>
+                    <span>{t("Baixar", "Download")}</span>
                   </button>
 
                   <button
@@ -2449,7 +2457,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                       className="min-h-[38px] flex items-center gap-1.5 py-1.5 px-3.5 bg-[#0F766E] dark:bg-[#0D9488] hover:bg-[#0D9488] text-[#FFFFFF] text-xs font-medium rounded-xl cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Publicar como Artigo</span>
+                      <span>{t("Publicar como Artigo", "Publish as Article")}</span>
                     </button>
                   )}
                 </div>
@@ -2459,10 +2467,10 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
             <div className="py-12 px-6 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] text-center space-y-3 flex-1 flex flex-col items-center justify-center">
               <ShieldCheck className="w-9 h-9 text-[#94A3B8] dark:text-[#6E7681]" strokeWidth={1.5} aria-hidden="true" />
               <div className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
-                Seu resumo está pronto para ser criado
+                {t("Seu resumo está pronto para ser criado", "Your research is ready to summarise")}
               </div>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] max-w-md mx-auto leading-relaxed">
-                Clique em "Criar Resumo Completo" para juntar tudo o que você pesquisou — suas perguntas, fotos e dados do mapa — em um texto fácil de ler e compartilhar.
+                {t("Clique em \"Criar Resumo Completo\" para juntar tudo o que você pesquisou — suas perguntas, fotos e dados do mapa — em um texto fácil de ler e compartilhar.", "Select “Create Full Summary” to combine your questions, photos and map data into a shareable report.")}
               </p>
               {onOpenPublishFromAi && (chatHistory.length > 0 || diagnosticResult || visionResult || latestAiAnalysis) && (
                 <button
@@ -2471,7 +2479,7 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   className="min-h-[38px] inline-flex items-center gap-1.5 py-1.5 px-4 bg-[#0F766E] dark:bg-[#0D9488] text-[#FFFFFF] text-xs font-medium rounded-xl cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Publicar análise como Artigo</span>
+                  <span>{t("Publicar análise como Artigo", "Publish analysis as an article")}</span>
                 </button>
               )}
             </div>
@@ -2484,20 +2492,20 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 id="catalog-heading" className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-              Lugares Parecidos no Mundo ({filteredSites.length})
+              {t("Lugares Parecidos no Mundo", "Analogue Sites Around the World")} ({filteredSites.length})
             </h2>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-              Clique em um lugar para abrir no mapa e comparar nos gráficos.
+              {t("Clique em um lugar para abrir no mapa e comparar nos gráficos.", "Select a site to open it on the map and compare it in the charts.")}
             </p>
           </div>
           <div className="relative w-full sm:w-64">
             <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
             <input
               type="text"
-              aria-label="Buscar lugar ou mineral no catálogo"
+              aria-label={t("Buscar lugar ou mineral no catálogo", "Search the catalogue for a site or mineral")}
               value={siteSearchQuery}
               onChange={(e) => setSiteSearchQuery(e.target.value)}
-              placeholder="Buscar lugar, país ou mineral..."
+              placeholder={t("Buscar lugar, país ou mineral...", "Search for a site, country or mineral...")}
               className="w-full bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] text-xs pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
             />
           </div>
@@ -2524,15 +2532,15 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <span className="font-semibold text-sm text-[#0F172A] dark:text-[#F0F6FC]">{site.name}</span>
-                    <span className="shrink-0 font-mono text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums" title="Estimativa do sítio">
+                    <span className="font-semibold text-sm text-[#0F172A] dark:text-[#F0F6FC]">{getSiteText(site, 'name')}</span>
+                    <span className="shrink-0 font-mono text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums" title={t("Estimativa do sítio", "Site estimate")}>
                       {site.fidelityScore}%
                     </span>
                   </div>
                   <div className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
-                    {site.country} · <span className="text-[#1E3A8A] dark:text-[#60A5FA] font-medium">{getCelestialBodyLabel(site.targetPlanet)}</span>
+                    {getSiteText(site, 'country')} · <span className="text-[#1E3A8A] dark:text-[#60A5FA] font-medium">{getCelestialBodyLabel(site.targetPlanet)}</span>
                   </div>
-                  <div className="text-xs text-[#64748B] dark:text-[#8B949E] mt-0.5 truncate">{site.primaryMinerals.slice(0, 3).join(', ')}</div>
+                  <div className="text-xs text-[#64748B] dark:text-[#8B949E] mt-0.5 truncate">{site.primaryMinerals.slice(0, 3).map(getMineralLabel).join(', ')}</div>
                 </button>
               </li>
             );
@@ -2543,11 +2551,11 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                <th scope="col" className="py-3 px-4">Lugar</th>
-                <th scope="col" className="py-3 px-4">País e Região</th>
-                <th scope="col" className="py-3 px-4">Planeta Parecido</th>
-                <th scope="col" className="py-3 px-4">O que tem lá</th>
-                <th scope="col" className="py-3 px-4 text-right" title="Estimativa editorial, não medida">Semelhança (est.)</th>
+                <th scope="col" className="py-3 px-4">{t("Lugar", "Site")}</th>
+                <th scope="col" className="py-3 px-4">{t("País e Região", "Country and Region")}</th>
+                <th scope="col" className="py-3 px-4">{t("Planeta Parecido", "Comparable Planet")}</th>
+                <th scope="col" className="py-3 px-4">{t("O que tem lá", "Site Features")}</th>
+                <th scope="col" className="py-3 px-4 text-right" title={t("Estimativa editorial, não medida", "Editorial estimate")}>{t("Semelhança (est.)", "Similarity (est.)")}</th>
               </tr>
             </thead>
             <tbody>
@@ -2580,16 +2588,16 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                     }`}
                   >
                     <td className="py-3 px-4 font-medium text-[#0F172A] dark:text-[#F0F6FC] rounded-l-xl">
-                      {site.name}
+                      {getSiteText(site, 'name')}
                     </td>
                     <td className="py-3 px-4 text-[#475569] dark:text-[#94A3B8] whitespace-nowrap">
-                      {site.country} · {site.region}
+                      {getSiteText(site, 'country')} · {getSiteText(site, 'region')}
                     </td>
                     <td className="py-3 px-4 text-xs text-[#1E3A8A] dark:text-[#60A5FA] font-medium">
                       {getCelestialBodyLabel(site.targetPlanet)}
                     </td>
                     <td className="py-3 px-4 text-xs text-[#475569] dark:text-[#94A3B8] max-w-xs truncate">
-                      {site.primaryMinerals.slice(0, 3).join(', ')}
+                      {site.primaryMinerals.slice(0, 3).map(getMineralLabel).join(', ')}
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-semibold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums rounded-r-xl">
                       {site.fidelityScore}%

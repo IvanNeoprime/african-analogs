@@ -1,3 +1,4 @@
+import { getMineralLabel } from '../data/siteTranslations';
 import React, { useId } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useI18n } from '../i18n';
@@ -42,8 +43,8 @@ interface MineralEditorProps {
 
 export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, suggestions = [] }) => {
   const listId = useId();
-  const { t } = useI18n();
-  const options = [...new Set([...COMMON_MINERALS, ...suggestions])].sort((a, b) => a.localeCompare(b, 'pt'));
+  const { t, locale } = useI18n();
+  const options = [...new Set([...COMMON_MINERALS, ...suggestions])].sort((a, b) => getMineralLabel(a).localeCompare(getMineralLabel(b), locale));
 
   const total = rows.reduce((sum, r) => {
     const v = parseFloat(r.pct.replace(',', '.'));
@@ -60,7 +61,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
       <legend className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">{t('Minerais observados (% em massa)', 'Observed minerals (% by mass)')}</legend>
       <datalist id={listId}>
         {options.map((o) => (
-          <option key={o} value={o} />
+          <option key={o} value={o} label={getMineralLabel(o)} />
         ))}
       </datalist>
 

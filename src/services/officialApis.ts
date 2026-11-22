@@ -248,6 +248,83 @@ export const NASA_DATA_SHORTCUTS: NasaDataShortcut[] = [
   },
 ];
 
+const englishNasaShortcuts: Partial<Record<string, Pick<NasaDataShortcut, 'title' | 'provider' | 'formats' | 'description' | 'howToUseHere'>>> = {
+  "nasa-pds-main": {
+    "title": "NASA PDS (Planetary Data System)",
+    "provider": "NASA · Planetary Archive",
+    "formats": "CSV · Tables · Spectra",
+    "description": "Official archive of public NASA mission data for Mars, the Moon, Titan, Europa, Enceladus and Venus.",
+    "howToUseHere": "Download tables or CSV/JSON files and open them with Import Spreadsheet or the AI Copilot."
+  },
+  "nasa-pds-geosciences": {
+    "title": "NASA PDS Geosciences Node (Rovers)",
+    "provider": "NASA / Washington University",
+    "formats": "XRF · XRD · Martian Soil",
+    "description": "Geological data from Perseverance, Curiosity, MRO and LRO, including rock mineralogy and chemistry.",
+    "howToUseHere": "Look up mineral and oxide concentrations to enter under Manual Data or compare in the charts."
+  },
+  "nasa-earthdata-search": {
+    "title": "NASA Earthdata Search (Satellite & DEM)",
+    "provider": "NASA EOSDIS Earthdata",
+    "formats": "GeoTIFF · SRTM DEM · Satellite",
+    "description": "Free satellite imagery and digital elevation models for African deserts and other study areas on Earth.",
+    "howToUseHere": "Download GeoTIFF files or images and upload them under Photo / Camera to analyse the terrain."
+  },
+  "nasa-worldview": {
+    "title": "NASA Worldview (Daily Satellite Imagery)",
+    "provider": "NASA GIBS / EOSDIS",
+    "formats": "PNG · JPEG · GeoTIFF",
+    "description": "Daily satellite imagery for viewing and downloading areas of interest, including dust storms, dunes and salt lakes.",
+    "howToUseHere": "Export an area as PNG, JPG or GeoTIFF and upload it under Photo / Camera."
+  },
+  "nasa-trek": {
+    "title": "NASA Mars & Moon Trek (3D Maps / DEM)",
+    "provider": "NASA Solar System Treks",
+    "formats": "GeoTIFF · Elevation · Craters",
+    "description": "Official NASA maps of Mars, the Moon and other worlds, with tools to download elevation subsets and compare craters.",
+    "howToUseHere": "Download a surface image and compare it with an African site in the Visual Copilot."
+  },
+  "nasa-mars-raw": {
+    "title": "NASA Mars Raw Images (Perseverance & Curiosity)",
+    "provider": "NASA JPL Mars Exploration",
+    "formats": "Raw Photos · JPG / PNG",
+    "description": "Public gallery of thousands of images of rocks, regolith and sedimentary layers taken on Mars.",
+    "howToUseHere": "Save a photo of Martian rock and compare it under Photo / Camera."
+  },
+  "nasa-hirise": {
+    "title": "NASA MRO HiRISE (High-Resolution Mars Imagery)",
+    "provider": "NASA JPL / Univ. of Arizona",
+    "formats": "Orbital Imagery · Dunes and Rocks",
+    "description": "High-resolution orbital catalogue of dunes, ancient deltas and mineral deposits on Mars.",
+    "howToUseHere": "Use the imagery to compare landforms with the Namib Sand Sea or the Richat Structure."
+  },
+  "nasa-usgs-speclib": {
+    "title": "USGS / NASA Spectral Library",
+    "provider": "USGS & NASA PDS Calibration",
+    "formats": "Spectra · Minerals · ASCII / CSV",
+    "description": "Laboratory reference spectra for materials such as hematite, gypsum, basalt and clays, used by space missions.",
+    "howToUseHere": "Consult reference spectra and minerals to check your sample measurements."
+  },
+  "nasa-open-data": {
+    "title": "NASA Open Data Portal",
+    "provider": "NASA Data.gov",
+    "formats": "CSV · JSON · Open Datasets",
+    "description": "Open NASA datasets on meteorites, astrobiology, atmospheric conditions and space missions.",
+    "howToUseHere": "Download CSV or JSON datasets and open them in the AI Copilot."
+  },
+  "nasa-sservi-analogs": {
+    "title": "NASA SSERVI — Terrestrial Analogues",
+    "provider": "NASA Exploration Science Institute",
+    "formats": "Field Guides · Analogues",
+    "description": "Research programmes and field campaigns in extreme terrestrial environments where NASA tests lunar and Martian instruments.",
+    "howToUseHere": "Find scientific references for your research notes and published articles."
+  }
+};
+
+export function localizeNasaShortcut(shortcut: NasaDataShortcut, lang: 'pt' | 'en'): NasaDataShortcut {
+  return lang === 'en' ? { ...shortcut, ...englishNasaShortcuts[shortcut.id] } : shortcut;
+}
+
 export function buildNasaWorldviewUrl(lat: number, lng: number): string {
   const minLng = Math.max(-180, lng - 4).toFixed(2);
   const minLat = Math.max(-85, lat - 4).toFixed(2);

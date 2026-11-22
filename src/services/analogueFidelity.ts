@@ -1,3 +1,5 @@
+import { tr } from '../i18n';
+import { getCelestialBodyLabel } from '../data/celestialBodies';
 import type { AnalogueSite, GeologicalSample, PlanetaryTarget, UnmeasuredField } from '../types';
 
 /**
@@ -20,6 +22,7 @@ import type { AnalogueSite, GeologicalSample, PlanetaryTarget, UnmeasuredField }
 
 interface MineralClass {
   label: string;
+  labelEn: string;
   keywords: string[];
 }
 
@@ -31,28 +34,28 @@ interface TargetProfile {
   /** Acceptable pH range for an analogue of this body, if meaningful. */
   pH?: [number, number];
   /** Shown to the user when the comparison is not meaningful. */
-  caveat?: string;
+  caveat?: [pt: string, en: string];
 }
 
 const C = {
-  sulfates: { label: 'sulfatos', keywords: ['sulfat', 'gesso', 'gipsita', 'anidrit', 'jarosit', 'kieserit', 'epsomit', 'mirabilit', 'alunit'] },
-  ironOxides: { label: 'óxidos de ferro', keywords: ['hematit', 'goethit', 'magnetit', 'ferridrit', 'óxido de ferro', 'oxido de ferro', 'óxidos de ferro', 'ferro'] },
-  phyllosilicates: { label: 'filossilicatos/argilas', keywords: ['argil', 'esmectit', 'montmoril', 'nontronit', 'saponit', 'caulin', 'caolin', 'clorit', 'ilit'] },
-  chlorides: { label: 'cloretos/percloratos', keywords: ['perclorat', 'clorat', 'cloret', 'halit', 'silvit', 'sal-gema', 'nacl'] },
-  mafic: { label: 'silicatos máficos', keywords: ['basalt', 'olivin', 'pirox', 'augit', 'pigeonit', 'plagiocl', 'forsterit'] },
-  carbonates: { label: 'carbonatos', keywords: ['carbonat', 'calcit', 'dolomit', 'siderit', 'magnesit', 'aragonit'] },
-  silica: { label: 'sílica hidratada', keywords: ['opal', 'sílica', 'silica', 'calcedon'] },
-  anorthosite: { label: 'plagioclásio/anortosito', keywords: ['plagiocl', 'anortosit', 'anortit', 'feldspat'] },
-  ilmenite: { label: 'ilmenite/opacos', keywords: ['ilmenit', 'espinel', 'cromit'] },
-  impact: { label: 'produtos de impacto', keywords: ['brecha', 'pseudotaquilit', 'quartzo chocado', 'vidro', 'impactit', 'coesit', 'stishovit', 'fusão'] },
-  sulfur: { label: 'enxofre/sulfetos', keywords: ['enxofre', 'sulfet', 'pirit', 'pirrotit', 'so2'] },
-  ice: { label: 'gelo', keywords: ['gelo', 'ice'] },
-  hydratedSalts: { label: 'sais hidratados', keywords: ['sulfat', 'mirabilit', 'epsomit', 'halit', 'cloret', 'natr', 'trona', 'carbonato de sódio'] },
-  serpentine: { label: 'serpentinização', keywords: ['serpentin', 'brucit', 'talco', 'magnetit'] },
-  sodaCarbonates: { label: 'carbonatos de sódio', keywords: ['trona', 'natr', 'nahcolit', 'carbonato de sódio', 'carbonat'] },
-  ammoniated: { label: 'filossilicatos amoniados', keywords: ['amoni', 'argil', 'esmectit', 'serpentin'] },
-  organics: { label: 'orgânicos', keywords: ['organ', 'orgân', 'hidrocarbon', 'betume', 'metan', 'tolin', 'querogen'] },
-  aeolianSand: { label: 'areia eólica', keywords: ['areia', 'quartzo', 'duna'] },
+  sulfates: { label: 'sulfatos', labelEn: 'sulfates', keywords: ['sulfat', 'gesso', 'gipsita', 'anidrit', 'jarosit', 'kieserit', 'epsomit', 'mirabilit', 'alunit'] },
+  ironOxides: { label: 'óxidos de ferro', labelEn: 'iron oxides', keywords: ['hematit', 'goethit', 'magnetit', 'ferridrit', 'óxido de ferro', 'oxido de ferro', 'óxidos de ferro', 'ferro'] },
+  phyllosilicates: { label: 'filossilicatos/argilas', labelEn: 'phyllosilicates and clays', keywords: ['argil', 'esmectit', 'montmoril', 'nontronit', 'saponit', 'caulin', 'caolin', 'clorit', 'ilit'] },
+  chlorides: { label: 'cloretos/percloratos', labelEn: 'chlorides and perchlorates', keywords: ['perclorat', 'clorat', 'cloret', 'halit', 'silvit', 'sal-gema', 'nacl'] },
+  mafic: { label: 'silicatos máficos', labelEn: 'mafic silicates', keywords: ['basalt', 'olivin', 'pirox', 'augit', 'pigeonit', 'plagiocl', 'forsterit'] },
+  carbonates: { label: 'carbonatos', labelEn: 'carbonates', keywords: ['carbonat', 'calcit', 'dolomit', 'siderit', 'magnesit', 'aragonit'] },
+  silica: { label: 'sílica hidratada', labelEn: 'hydrated silica', keywords: ['opal', 'sílica', 'silica', 'calcedon'] },
+  anorthosite: { label: 'plagioclásio/anortosito', labelEn: 'plagioclase and anorthosite', keywords: ['plagiocl', 'anortosit', 'anortit', 'feldspat'] },
+  ilmenite: { label: 'ilmenite/opacos', labelEn: 'ilmenite and opaque minerals', keywords: ['ilmenit', 'espinel', 'cromit'] },
+  impact: { label: 'produtos de impacto', labelEn: 'impact products', keywords: ['brecha', 'pseudotaquilit', 'quartzo chocado', 'vidro', 'impactit', 'coesit', 'stishovit', 'fusão'] },
+  sulfur: { label: 'enxofre/sulfetos', labelEn: 'sulphur and sulphides', keywords: ['enxofre', 'sulfet', 'pirit', 'pirrotit', 'so2'] },
+  ice: { label: 'gelo', labelEn: 'ice', keywords: ['gelo', 'ice'] },
+  hydratedSalts: { label: 'sais hidratados', labelEn: 'hydrated salts', keywords: ['sulfat', 'mirabilit', 'epsomit', 'halit', 'cloret', 'natr', 'trona', 'carbonato de sódio'] },
+  serpentine: { label: 'serpentinização', labelEn: 'serpentinisation', keywords: ['serpentin', 'brucit', 'talco', 'magnetit'] },
+  sodaCarbonates: { label: 'carbonatos de sódio', labelEn: 'sodium carbonates', keywords: ['trona', 'natr', 'nahcolit', 'carbonato de sódio', 'carbonat'] },
+  ammoniated: { label: 'filossilicatos amoniados', labelEn: 'ammoniated phyllosilicates', keywords: ['amoni', 'argil', 'esmectit', 'serpentin'] },
+  organics: { label: 'orgânicos', labelEn: 'organics', keywords: ['organ', 'orgân', 'hidrocarbon', 'betume', 'metan', 'tolin', 'querogen'] },
+  aeolianSand: { label: 'areia eólica', labelEn: 'wind-blown sand', keywords: ['areia', 'quartzo', 'duna'] },
 } satisfies Record<string, MineralClass>;
 
 const ICY_MOON: TargetProfile = {
@@ -60,7 +63,7 @@ const ICY_MOON: TargetProfile = {
   classes: [C.ice, C.hydratedSalts, C.sulfur, C.organics],
   aw: [0.6, 1],
   pH: [6, 11],
-  caveat: 'Análogos terrestres só reproduzem parcialmente crostas de gelo e oceanos internos.',
+  caveat: ['Análogos terrestres só reproduzem parcialmente crostas de gelo e oceanos internos.', 'Terrestrial analogues only partially reproduce ice crusts and subsurface oceans.'],
 };
 
 const AIRLESS_SILICATE: TargetProfile = {
@@ -114,7 +117,7 @@ const PROFILES: Partial<Record<PlanetaryTarget, TargetProfile>> = {
     label: 'Titã',
     classes: [C.organics, C.ice, C.aeolianSand],
     aw: [0, 0.3],
-    caveat: 'Titã não tem água líquida à superfície; a comparação vale sobretudo para morfologia de dunas e orgânicos.',
+    caveat: ['Titã não tem água líquida à superfície; a comparação vale sobretudo para morfologia de dunas e orgânicos.', 'Titan has no liquid surface water. The comparison chiefly applies to dune morphology and organics.'],
   },
   Earth: {
     label: 'Terra (referência)',
@@ -180,20 +183,20 @@ export function computeAnalogueFidelity(
     thermal: site ? site.thermal : 0,
   };
   if (site) {
-    notes.push(`Terreno, radiação e clima vêm do sítio de referência (${referenceSite!.name}) e não entram na nota da amostra.`);
+    notes.push(tr(`Terreno, radiação e clima vêm do sítio de referência (${referenceSite!.name}) e não entram na nota da amostra.`, `Terrain, radiation and climate come from the reference site (${referenceSite!.name}) and are excluded from the sample score.`));
   }
 
   if (NO_SURFACE.includes(targetPlanet)) {
-    notes.push('Este planeta não tem superfície sólida: não há análogo mineral terrestre comparável.');
+    notes.push(tr("Este planeta não tem superfície sólida: não há análogo mineral terrestre comparável.", "This planet has no solid surface, so there is no comparable terrestrial mineral analogue."));
     return { mineralogy: 0, geochemistry: 0, ...siteAxes, total: 0, coverage: 0, notes };
   }
 
   const profile = profileFor(targetPlanet);
   if (!profile) {
-    notes.push('Ainda não há perfil de referência para este corpo.');
+    notes.push(tr("Ainda não há perfil de referência para este corpo.", "A reference profile is not yet available for this body."));
     return { mineralogy: 0, geochemistry: 0, ...siteAxes, total: 0, coverage: 0, notes };
   }
-  if (profile.caveat) notes.push(profile.caveat);
+  if (profile.caveat) notes.push(tr(...profile.caveat));
 
   // --- Mineralogy ---
   const minerals = unmeasured.has('minerals') ? {} : sample.minerals || {};
@@ -213,11 +216,11 @@ export function computeAnalogueFidelity(
     mineralogy = 100 * (0.6 * share + 0.4 * diversity);
     notes.push(
       matchedClasses.length > 0
-        ? `Minerais indicadores de ${profile.label}: ${matchedClasses.map((c) => c.label).join(', ')} (${Math.round(share * 100)}% da massa informada).`
-        : `Nenhum mineral indicador de ${profile.label} entre os minerais informados.`
+        ? tr(`Minerais indicadores de ${profile.label}: ${matchedClasses.map((c) => c.label).join(', ')} (${Math.round(share * 100)}% da massa informada).`, `Indicator minerals for ${getCelestialBodyLabel(targetPlanet)}: ${matchedClasses.map((c) => c.labelEn).join(', ')} (${Math.round(share * 100)}% of entered mass).`)
+        : tr(`Nenhum mineral indicador de ${profile.label} entre os minerais informados.`, `No indicator minerals for ${getCelestialBodyLabel(targetPlanet)} were found in the entered minerals.`)
     );
   } else {
-    notes.push('Sem minerais informados: a mineralogia não pode ser avaliada.');
+    notes.push(tr("Sem minerais informados: a mineralogia não pode ser avaliada.", "Enter minerals to assess mineralogy."));
   }
 
   // --- Geochemistry ---
@@ -226,18 +229,18 @@ export function computeAnalogueFidelity(
     if (!unmeasured.has('waterActivity') && Number.isFinite(sample.waterActivity)) {
       const s = rangeScore(sample.waterActivity!, profile.aw, 0.3);
       chemParts.push(s);
-      notes.push(`aw ${sample.waterActivity} vs. referência ${profile.aw[0]}–${profile.aw[1]}: ${Math.round(s)}/100.`);
+      notes.push(tr(`aw ${sample.waterActivity} vs. referência ${profile.aw[0]}–${profile.aw[1]}: ${Math.round(s)}/100.`, `aw ${sample.waterActivity} vs. reference ${profile.aw[0]}–${profile.aw[1]}: ${Math.round(s)}/100.`));
     } else {
-      notes.push('aw não medida.');
+      notes.push(tr("aw não medida.", "aw not measured."));
     }
   }
   if (profile.pH) {
     if (!unmeasured.has('pH') && Number.isFinite(sample.pH)) {
       const s = rangeScore(sample.pH!, profile.pH, 3);
       chemParts.push(s);
-      notes.push(`pH ${sample.pH} vs. referência ${profile.pH[0]}–${profile.pH[1]}: ${Math.round(s)}/100.`);
+      notes.push(tr(`pH ${sample.pH} vs. referência ${profile.pH[0]}–${profile.pH[1]}: ${Math.round(s)}/100.`, `pH ${sample.pH} vs. reference ${profile.pH[0]}–${profile.pH[1]}: ${Math.round(s)}/100.`));
     } else {
-      notes.push('pH não medido.');
+      notes.push(tr("pH não medido.", "pH not measured."));
     }
   }
   const geochemistry = chemParts.length > 0 ? chemParts.reduce((a, b) => a + b, 0) / chemParts.length : 0;
@@ -250,7 +253,7 @@ export function computeAnalogueFidelity(
     (weights.mineralogy * mineralogy + weights.geochemistry * geochemistry * (expectedChem > 0 ? chemParts.length / expectedChem : 0)) /
     weightSum;
   const coverage = (Number(mineralogyMeasured) + chemParts.length) / (1 + expectedChem);
-  if (coverage < 1) notes.push(`Dados medidos cobrem ${Math.round(coverage * 100)}% dos critérios; complete-os para uma nota fiável.`);
+  if (coverage < 1) notes.push(tr(`Dados medidos cobrem ${Math.round(coverage * 100)}% dos critérios; complete-os para uma nota fiável.`, `Measurements cover ${Math.round(coverage * 100)}% of the criteria. Enter the missing data for a more reliable score.`));
 
   return {
     mineralogy: round1(mineralogy),

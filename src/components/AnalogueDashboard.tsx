@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnalogueSite, GeologicalSample, LatestAiAnalysisSnapshot } from '../types';
 import { computeAnalogueFidelity, generateSpectralReflectanceCurve } from '../services/spectralEngine';
@@ -43,6 +44,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
   onSelectSite,
   onUpdateSample,
 }) => {
+  const { t } = useI18n();
   const [hoveredPointIdx, setHoveredPointIdx] = useState<number | null>(null);
   const [hoveredSliceIdx, setHoveredSliceIdx] = useState<number | null>(null);
   const [isEditingDashboard, setIsEditingDashboard] = useState(false);
@@ -171,7 +173,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
     };
     onUpdateSample(updated);
     setIsEditingDashboard(false);
-    setDashSavedNotice('Dados do painel e gráficos atualizados!');
+    setDashSavedNotice(t("Dados do painel e gráficos atualizados!", "Dashboard and charts updated."));
     setTimeout(() => setDashSavedNotice(null), 3500);
   };
 
@@ -209,9 +211,9 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
   const radarDimensions = [
     { key: 'mineralogy' as const, short: 'MIN', label: 'Mineralogia' },
     { key: 'geomorphology' as const, short: 'GEO', label: 'Geomorfologia' },
-    { key: 'geochemistry' as const, short: 'CHM', label: 'Geoquímica' },
-    { key: 'radiation' as const, short: 'RAD', label: 'Radiação' },
-    { key: 'thermal' as const, short: 'TER', label: 'Térmica' },
+    { key: 'geochemistry' as const, short: 'CHM', label: t("Geoquímica", "Geochemistry") },
+    { key: 'radiation' as const, short: 'RAD', label: t("Radiação", "Radiation") },
+    { key: 'thermal' as const, short: 'TER', label: t("Térmica", "Temperature") },
   ];
 
   const getRadarPolygon = (
@@ -284,10 +286,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
   const arcActiveLength = (afiScore / 100) * arcHalfCircumference;
   const arcCategory =
     afiScore >= 80
-      ? { text: 'Alta Fidelidade Análoga', colorClass: 'text-[#15803D] dark:text-[#4ADE80]', stroke: '#15803D' }
+      ? { text: t("Alta Fidelidade Análoga", "High Analogue Fidelity"), colorClass: 'text-[#15803D] dark:text-[#4ADE80]', stroke: '#15803D' }
       : afiScore >= 60
-      ? { text: 'Aderência Moderada', colorClass: 'text-[#B45309] dark:text-[#FBBF24]', stroke: '#D97706' }
-      : { text: 'Baixa Aderência', colorClass: 'text-[#B91C1C] dark:text-[#FCA5A5]', stroke: '#B91C1C' };
+      ? { text: t("Aderência Moderada", "Moderate Similarity"), colorClass: 'text-[#B45309] dark:text-[#FBBF24]', stroke: '#D97706' }
+      : { text: t("Baixa Aderência", "Low Similarity"), colorClass: 'text-[#B91C1C] dark:text-[#FCA5A5]', stroke: '#B91C1C' };
 
   // Dynamic Everyday Pros & Cons
   const prosAndCons = useMemo(() => {
@@ -296,11 +298,11 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
     if (activeSample.waterActivity <= 0.35) {
       pros.push(
-        `Solo bem seco (atividade de água aw ${activeSample.waterActivity}), muito parecido com o clima seco de ${targetLabel}.`
+        t(`Solo bem seco (atividade de água aw ${activeSample.waterActivity}), muito parecido com o clima seco de ${targetLabel}.`, `Very dry soil (water activity ${activeSample.waterActivity}), similar to the dry conditions on ${targetLabel}.`)
       );
     } else {
       cons.push(
-        `Atividade de água um pouco alta (aw ${activeSample.waterActivity}) comparada aos ambientes secos de ${targetLabel}.`
+        t(`Atividade de água um pouco alta (aw ${activeSample.waterActivity}) comparada aos ambientes secos de ${targetLabel}.`, `Water activity (${activeSample.waterActivity}) is relatively high compared with dry environments on ${targetLabel}.`)
       );
     }
 
@@ -323,23 +325,23 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
     if (selectedSite.atmosphericPressureMbar > 700) {
       cons.push(
-        `Aqui na Terra o ar é mais denso que em ${targetLabel}, o que muda testes ao ar livre.`
+        t(`Aqui na Terra o ar é mais denso que em ${targetLabel}, o que muda testes ao ar livre.`, `Air on Earth is denser than on ${targetLabel}, which affects outdoor tests.`)
       );
     }
 
     if (selectedSite.uvRadiationWm2 < 50) {
       cons.push(
-        `Pouca luz solar UV no local (${selectedSite.uvRadiationWm2} W/m²) exige atenção extra em testes de radiação.`
+        t(`Pouca luz solar UV no local (${selectedSite.uvRadiationWm2} W/m²) exige atenção extra em testes de radiação.`, `Low UV irradiance at the site (${selectedSite.uvRadiationWm2} W/m²) requires extra care in radiation tests.`)
       );
     } else {
       pros.push(
-        `Sol forte (${selectedSite.uvRadiationWm2} W/m²) ótimo para testar como a radiação afeta o solo.`
+        t(`Sol forte (${selectedSite.uvRadiationWm2} W/m²) ótimo para testar como a radiação afeta o solo.`, `Strong sunlight (${selectedSite.uvRadiationWm2} W/m²) helps test how radiation affects the soil.`)
       );
     }
 
     if (activeSample.fidelityScores.total < 85) {
       cons.push(
-        `Semelhança atual de ${activeSample.fidelityScores.total}% mostra que vale testar mais amostras ou outra região.`
+        t(`Semelhança atual de ${activeSample.fidelityScores.total}% mostra que vale testar mais amostras ou outra região.`, `The current similarity score of ${activeSample.fidelityScores.total}% suggests testing more samples or another region.`)
       );
     }
 
@@ -389,13 +391,13 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
   }, [activeSample.xrfComposition]);
 
   const oxidePlainName: Record<string, string> = {
-    SiO2: 'Sílica (Areia/Quartzo)',
-    Fe2O3: 'Óxido de Ferro',
-    Al2O3: 'Alumínio',
-    MgO: 'Magnésio',
-    CaO: 'Cálcio',
-    SO3: 'Enxofre / Sulfato',
-    TiO2: 'Titânio',
+    SiO2: t("Sílica (Areia/Quartzo)", "Silica (Sand/Quartz)"),
+    Fe2O3: t("Óxido de Ferro", "Iron Oxide"),
+    Al2O3: t("Alumínio", "Aluminium"),
+    MgO: t("Magnésio", "Magnesium"),
+    CaO: t("Cálcio", "Calcium"),
+    SO3: t("Enxofre / Sulfato", "Sulphur / Sulfate"),
+    TiO2: t("Titânio", "Titanium"),
   };
 
   return (
@@ -405,7 +407,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 id="dashboard-heading" className="font-poppins text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC] tracking-tight">
-              Painel de Resultados &amp; Gráficos
+              {t("Painel de Resultados & Gráficos", "Results Dashboard and Charts")}
             </h2>
             <p className="text-xs sm:text-sm text-[#475569] dark:text-[#94A3B8] mt-0.5">
               <strong className="text-[#0F172A] dark:text-[#F0F6FC]">{activeSample.name}</strong> · Lugar:{' '}
@@ -416,7 +418,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
           <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full sm:shrink-0">
             <select
-              aria-label="Escolher referência de comparação nos gráficos"
+              aria-label={t("Escolher referência de comparação nos gráficos", "Choose a comparison reference for the charts")}
               value={compareSiteId}
               onChange={(e) => setCompareSiteId(e.target.value)}
               className="w-full sm:w-auto min-w-0 max-w-full min-h-[40px] bg-[#F1F5F9] dark:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium px-3 py-1.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A] cursor-pointer"
@@ -448,7 +450,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                 }`}
               >
                 {isEditingDashboard ? <X className="w-3.5 h-3.5" /> : <PencilLine className="w-3.5 h-3.5" />}
-                <span>{isEditingDashboard ? 'Fechar Edição' : 'Editar Dados do Painel'}</span>
+                <span>{isEditingDashboard ? t("Fechar Edição", "Close Editor") : t("Editar Dados do Painel", "Edit Dashboard Data")}</span>
               </button>
             )}
           </div>
@@ -466,10 +468,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-xs font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
-                  Editar dados manuais dos gráficos e lugar
+                  {t("Editar dados manuais dos gráficos e lugar", "Edit chart data and site details")}
                 </div>
                 <div className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
-                  Os valores dos gráficos e medidas são inseridos manualmente por você.
+                  {t("Os valores dos gráficos e medidas são inseridos manualmente por você.", "Enter the chart values and measurements manually.")}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -480,7 +482,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                     className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#1E3A8A] dark:text-[#60A5FA] text-xs font-medium inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Copiar texto do copiloto p/ conclusão</span>
+                    <span>{t("Copiar texto do copiloto p/ conclusão", "Copy copilot text to the conclusion")}</span>
                   </button>
                 )}
                 <button
@@ -504,7 +506,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                   }}
                   className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-xs font-medium text-[#0F766E] dark:text-[#2DD4BF] shadow-xs cursor-pointer"
                 >
-                  Recalcular pelo solo
+                  {t("Recalcular pelo solo", "Recalculate from soil data")}
                 </button>
               </div>
             </div>
@@ -513,7 +515,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               <div className="p-3 rounded-xl bg-[#FFFFFF] dark:bg-[#161B22] space-y-1 text-xs">
                 <div className="font-semibold text-[#1E3A8A] dark:text-[#60A5FA] flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Parecer do Copiloto IA (apenas apoio à leitura)</span>
+                  <span>{t("Parecer do Copiloto IA (apenas apoio à leitura)", "AI Copilot Assessment")}</span>
                 </div>
                 <p className="text-[#475569] dark:text-[#94A3B8] line-clamp-3 leading-relaxed">
                   {copilotGuidanceText}
@@ -524,7 +526,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="dash-edit-name" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Nome do Estudo / Amostra
+                  {t("Nome do Estudo / Amostra", "Study or Sample Name")}
                 </label>
                 <input
                   id="dash-edit-name"
@@ -536,14 +538,14 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-edit-loc" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Lugar (escrito manualmente)
+                  {t("Lugar (escrito manualmente)", "Site (entered manually)")}
                 </label>
                 <input
                   id="dash-edit-loc"
                   type="text"
                   value={dashLocation}
                   onChange={(e) => setDashLocation(e.target.value)}
-                  placeholder="Ex.: Deserto do Namibe, Angola"
+                  placeholder={t("Ex.: Deserto do Namibe, Angola", "E.g. Namib Desert, Angola")}
                   className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2 rounded-lg"
                 />
               </div>
@@ -552,7 +554,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
               <div>
                 <label htmlFor="dash-score-total" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Semelhança (%)
+                  {t("Semelhança (%)", "Similarity (%)")}
                 </label>
                 <input
                   id="dash-score-total"
@@ -566,7 +568,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-score-min" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Rochas (%)
+                  {t("Rochas (%)", "Rocks (%)")}
                 </label>
                 <input
                   id="dash-score-min"
@@ -580,7 +582,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-score-geo" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Terreno (%)
+                  {t("Terreno (%)", "Terrain (%)")}
                 </label>
                 <input
                   id="dash-score-geo"
@@ -594,7 +596,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-score-chm" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Solo (%)
+                  {t("Solo (%)", "Soil (%)")}
                 </label>
                 <input
                   id="dash-score-chm"
@@ -608,7 +610,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-score-rad" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Sol UV (%)
+                  {t("Sol UV (%)", "UV light (%)")}
                 </label>
                 <input
                   id="dash-score-rad"
@@ -622,7 +624,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-score-ter" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Clima (%)
+                  {t("Clima (%)", "Climate (%)")}
                 </label>
                 <input
                   id="dash-score-ter"
@@ -639,7 +641,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
               <div className="sm:col-span-2">
                 <label htmlFor="dash-edit-minerals" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Minerais (ex.: Basalto: 50, Ferro: 30, Gesso: 20)
+                  {t("Minerais (ex.: Basalto: 50, Ferro: 30, Gesso: 20)", "Minerals (e.g. Basalt: 50, Iron: 30, Gypsum: 20)")}
                 </label>
                 <input
                   id="dash-edit-minerals"
@@ -651,7 +653,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-edit-aw" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Atividade de água (aw, 0–1)
+                  {t("Atividade de água (aw, 0–1)", "Water activity (aw, 0–1)")}
                 </label>
                 <input
                   id="dash-edit-aw"
@@ -666,7 +668,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </div>
               <div>
                 <label htmlFor="dash-edit-ph" className="block text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Acidez (pH)
+                  {t("Acidez (pH)", "Acidity (pH)")}
                 </label>
                 <input
                   id="dash-edit-ph"
@@ -683,7 +685,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
             <div>
               <span className="block text-[11px] font-medium text-[#475569] dark:text-[#94A3B8] mb-1.5">
-                Elementos da rocha (%)
+                {t("Elementos da rocha (%)", "Rock constituents (%)")}
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {Object.entries(dashXrf).map(([oxide, val]) => (
@@ -713,7 +715,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
 
             <div>
               <label htmlFor="dash-edit-notes" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                Observações / Conclusão da Análise
+                {t("Observações / Conclusão da Análise", "Observations / Analysis Conclusion")}
               </label>
               <textarea
                 id="dash-edit-notes"
@@ -730,13 +732,13 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
                 onClick={() => setIsEditingDashboard(false)}
                 className="py-2 px-4 rounded-xl bg-[#FFFFFF] dark:bg-[#161B22] text-xs font-medium text-[#475569] cursor-pointer"
               >
-                Cancelar
+                {t("Cancelar", "Cancel")}
               </button>
               <button
                 type="submit"
                 className="py-2 px-5 rounded-xl bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF] text-xs font-medium cursor-pointer"
               >
-                Salvar nos Gráficos
+                {t("Salvar nos Gráficos", "Save to Charts")}
               </button>
             </div>
           </form>
@@ -754,7 +756,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
         </div>
 
         <div className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">Minerais Parecidos</span>
+          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">{t("Minerais Parecidos", "Similar Minerals")}</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-[#0F172A] dark:text-[#F0F6FC] tabular-nums my-1.5">
             {activeSample.fidelityScores.mineralogy}%
           </div>
@@ -764,7 +766,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
         </div>
 
         <div className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">Solo &amp; Química</span>
+          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">{t("Solo & Química", "Soil and Chemistry")}</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-[#0F172A] dark:text-[#F0F6FC] tabular-nums my-1.5">
             {activeSample.fidelityScores.geochemistry}%
           </div>
@@ -774,12 +776,12 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
         </div>
 
         <div className="bg-[#F8FAFC] dark:bg-[#0D1117] border border-dashed border-[#CBD5E1] dark:border-[#30363D] rounded-2xl p-5 flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">Ambiente do sítio (referência)</span>
+          <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">{t("Ambiente do sítio (referência)", "Site environment (reference)")}</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-[#475569] dark:text-[#94A3B8] tabular-nums my-1.5">
             {Math.round((activeSample.fidelityScores.thermal + activeSample.fidelityScores.radiation) / 2)}%
           </div>
           <span className="text-xs text-[#475569] dark:text-[#94A3B8] tabular-nums">
-            Sol e temperatura · não entra na nota da amostra
+            {t("Sol e temperatura · não entra na nota da amostra", "Sunlight and temperature are excluded from the sample score")}
           </span>
         </div>
       </div>
@@ -791,7 +793,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <Gauge className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Nível de semelhança</span>
+              <span>{t("Nível de semelhança", "Similarity level")}</span>
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
               Quanto a sua amostra se parece com {targetLabel}
@@ -847,7 +849,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           </div>
 
           <div className="bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-3 space-y-1.5 text-xs">
-            <div className="font-semibold text-[#0F172A] dark:text-[#F0F6FC]">Legenda do medidor:</div>
+            <div className="font-semibold text-[#0F172A] dark:text-[#F0F6FC]">{t("Legenda do medidor:", "Gauge legend:")}</div>
             <div className="grid grid-cols-3 gap-2 text-[#475569] dark:text-[#94A3B8] text-[11px]">
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-[#B91C1C] shrink-0" />
@@ -855,7 +857,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-[#D97706] shrink-0" />
-                <span>60–79% Média</span>
+                <span>{t("60–79% Média", "60–79% Moderate")}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-sm bg-[#15803D] shrink-0" />
@@ -870,15 +872,15 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <PieChart className="w-4 h-4 text-[#0F766E] dark:text-[#2DD4BF]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Composição mineral</span>
+              <span>{t("Composição mineral", "Mineral composition")}</span>
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-              Porcentagem de cada tipo de mineral encontrado
+              {t("Porcentagem de cada tipo de mineral encontrado", "Percentage of each mineral found")}
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <svg viewBox="0 0 160 160" className="w-36 h-36 shrink-0" role="img" aria-label="Gráfico de pizza dos minerais do solo">
+            <svg viewBox="0 0 160 160" className="w-36 h-36 shrink-0" role="img" aria-label={t("Gráfico de pizza dos minerais do solo", "Pie chart of soil minerals")}>
               <g transform="rotate(-90 80 80)">
                 {donutSegments.map((seg) => (
                   <circle
@@ -939,7 +941,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           </div>
 
           <div className="text-[11px] text-[#475569] dark:text-[#94A3B8] bg-[#F8FAFC] dark:bg-[#0D1117] px-3 py-2 rounded-xl">
-            Legenda: toque ou passe o rato sobre uma cor ou nome para destacar a sua parte no gráfico.
+            {t("Legenda: toque ou passe o rato sobre uma cor ou nome para destacar a sua parte no gráfico.", "Tap or hover over a colour or name to highlight its segment.")}
           </div>
         </div>
 
@@ -948,15 +950,15 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
               <Compass className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Comparação em 5 critérios</span>
+              <span>{t("Comparação em 5 critérios", "Comparison across 5 criteria")}</span>
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-              A sua amostra e o sítio de referência, critério a critério
+              {t("A sua amostra e o sítio de referência, critério a critério", "Your sample and the reference site, criterion by criterion")}
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row xl:flex-col items-center justify-center gap-3">
-            <svg viewBox="0 0 240 220" className="w-full max-w-[235px] h-auto" role="img" aria-label="Gráfico estrela de comparação em 5 áreas">
+            <svg viewBox="0 0 240 220" className="w-full max-w-[235px] h-auto" role="img" aria-label={t("Gráfico estrela de comparação em 5 áreas", "Radar chart comparing 5 criteria")}>
               {[0.25, 0.5, 0.75, 1].map((scale) => (
                 <polygon
                   key={scale}
@@ -1015,7 +1017,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="flex flex-wrap items-center justify-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-[#0F172A] dark:text-[#F0F6FC] font-medium">
                 <span className="w-3 h-2 rounded-xs bg-[#1E3A8A] dark:bg-[#60A5FA] inline-block" />
-                <span>Sua amostra</span>
+                <span>{t("Sua amostra", "Your sample")}</span>
               </span>
               <span className="inline-flex items-center gap-1.5 text-[#475569] dark:text-[#94A3B8]">
                 <span className="w-3 h-0.5 border-t-2 border-dashed border-[#0F766E] dark:border-[#2DD4BF] inline-block" />
@@ -1023,7 +1025,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
             </div>
             <div className="text-[11px] text-center text-[#64748B] dark:text-[#8B949E]">
-              MIN: Minerais · GEO: Terreno · CHM: Química · RAD: Luz UV · TER: Temperatura
+              {t("MIN: Minerais · GEO: Terreno · CHM: Química · RAD: Luz UV · TER: Temperatura", "MIN: Minerals · GEO: Terrain · CHM: Chemistry · RAD: UV light · TER: Temperature")}
             </div>
           </div>
         </div>
@@ -1036,10 +1038,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div>
               <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                <span>Reflexão da luz (400–2500 nm)</span>
+                <span>{t("Reflexão da luz (400–2500 nm)", "Light reflectance (400–2500 nm)")}</span>
               </h3>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-                Curva estimada a partir dos minerais da amostra, comparada com o sítio de referência
+                {t("Curva estimada a partir dos minerais da amostra, comparada com o sítio de referência", "Estimated reflectance from sample minerals compared with the reference site")}
               </p>
             </div>
             {hoveredPointIdx !== null && sampleCurve[hoveredPointIdx] ? (
@@ -1048,24 +1050,24 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
             ) : (
               <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] bg-[#F1F5F9] dark:bg-[#21262D] px-2.5 py-1 rounded-lg">
-                Toque ou passe o rato nos pontos
+                {t("Toque ou passe o rato nos pontos", "Tap or hover over a point")}
               </span>
             )}
           </div>
 
           <div className="w-full overflow-x-auto bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-3">
-            <svg viewBox="0 0 510 182" className="w-full h-auto" role="img" aria-label="Gráfico de linhas comparando reflexo de luz">
+            <svg viewBox="0 0 510 182" className="w-full h-auto" role="img" aria-label={t("Gráfico de linhas comparando reflexo de luz", "Line chart comparing light reflectance")}>
               <rect x={mapX(400)} y="8" width={mapX(700) - mapX(400)} height="144" className="fill-[#1E3A8A]/5 dark:fill-[#60A5FA]/5" />
               <rect x={mapX(1400)} y="8" width={mapX(2500) - mapX(1400)} height="144" className="fill-[#0F766E]/5 dark:fill-[#2DD4BF]/5" />
 
               <text x={(mapX(400) + mapX(700)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] max-sm:text-[14px] font-sans">
-                Luz Visível
+                {t("Luz Visível", "Visible Light")}
               </text>
               <text x={(mapX(700) + mapX(1400)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] max-sm:text-[14px] font-sans">
-                Ferro / Rocha
+                {t("Ferro / Rocha", "Iron / Rock")}
               </text>
               <text x={(mapX(1400) + mapX(2500)) / 2} y="18" textAnchor="middle" className="fill-[#64748B] text-[8px] max-sm:text-[14px] font-sans">
-                Água / Sais / Argila
+                {t("Água / Sais / Argila", "Water / Salts / Clay")}
               </text>
 
               {[0.2, 0.4, 0.6, 0.8].map((val) => {
@@ -1125,7 +1127,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
             <div className="flex flex-wrap items-center gap-5">
               <span className="inline-flex items-center gap-2 font-medium text-[#0F172A] dark:text-[#F0F6FC]">
                 <span className="w-5 h-0.5 bg-[#1E3A8A] dark:bg-[#60A5FA] inline-block" />
-                <span>Sua amostra ({activeSample.name})</span>
+                <span>{t("Sua amostra", "Your sample")} ({activeSample.name})</span>
               </span>
               <span className="inline-flex items-center gap-2 text-[#475569] dark:text-[#94A3B8]">
                 <span className="w-5 h-0.5 border-t-2 border-dashed border-[#0F766E] dark:border-[#2DD4BF] inline-block" />
@@ -1133,7 +1135,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               </span>
             </div>
             <span className="text-[11px] text-[#64748B] dark:text-[#8B949E]">
-              Horizontal: tipo de luz · Vertical: brilho refletido (%)
+              {t("Horizontal: tipo de luz · Vertical: brilho refletido (%)", "Horizontal: light type · Vertical: reflectance (%)")}
             </span>
           </div>
         </div>
@@ -1141,10 +1143,10 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
         <div className="lg:col-span-4 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4">
           <div>
             <h3 className="font-poppins text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
-              Principais Elementos da Rocha
+              {t("Principais Elementos da Rocha", "Main Rock Constituents")}
             </h3>
             <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-              Quantidade de cada componente encontrado no solo
+              {t("Quantidade de cada componente encontrado no solo", "Amount of each component found in the soil")}
             </p>
           </div>
 
@@ -1174,7 +1176,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           </div>
 
           <div className="bg-[#F8FAFC] dark:bg-[#0D1117] px-3 py-2 rounded-xl text-[11px] text-[#475569] dark:text-[#94A3B8] flex items-center justify-between">
-            <span>Legenda: porcentagem na amostra</span>
+            <span>{t("Legenda: porcentagem na amostra", "Legend: percentage in the sample")}</span>
             <span className="font-mono">{activeSample.depthCm} cm de fundo</span>
           </div>
         </div>
@@ -1186,7 +1188,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="font-poppins text-sm font-semibold text-[#15803D] dark:text-[#4ADE80] flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              <span>Pontos Fortes (Prós)</span>
+              <span>{t("Pontos Fortes (Prós)", "Strengths")}</span>
             </h3>
             <span className="text-xs font-mono text-[#15803D] dark:text-[#4ADE80] tabular-nums">
               {prosAndCons.pros.length}
@@ -1205,7 +1207,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
           <div className="flex items-center justify-between">
             <h3 className="font-poppins text-sm font-semibold text-[#B45309] dark:text-[#FBBF24] flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              <span>Diferenças e Limites (Contras)</span>
+              <span>{t("Diferenças e Limites (Contras)", "Differences and Limitations")}</span>
             </h3>
             <span className="text-xs font-mono text-[#B45309] dark:text-[#FBBF24] tabular-nums">
               {prosAndCons.cons.length}
@@ -1220,7 +1222,7 @@ export const AnalogueDashboard: React.FC<AnalogueDashboardProps> = ({
               ))
             ) : (
               <li className="p-3.5 rounded-xl bg-[#F1F5F9] dark:bg-[#21262D] text-[#475569] dark:text-[#94A3B8]">
-                Nenhuma diferença importante encontrada para este planeta.
+                {t("Nenhuma diferença importante encontrada para este planeta.", "No major differences were found for this planet.")}
               </li>
             )}
           </ul>

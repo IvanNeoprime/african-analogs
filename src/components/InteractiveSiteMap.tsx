@@ -1,3 +1,5 @@
+import { getMineralLabel, getSiteText } from '../data/siteTranslations';
+import { getLocale, tr, useI18n } from '../i18n';
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Calendar, ChevronLeft, ChevronRight, Layers, Maximize2, Minimize2, Pause, Play } from 'lucide-react';
@@ -137,17 +139,17 @@ function siteIcon(site: AnalogueSite, isSelected: boolean): L.DivIcon {
 }
 
 function sitePopupHtml(site: AnalogueSite): string {
-  const minerals = site.primaryMinerals.slice(0, 3).map(escapeHtml).join(', ');
+  const minerals = site.primaryMinerals.slice(0, 3).map((mineral) => escapeHtml(getMineralLabel(mineral))).join(', ');
   return `
     <div class="aa-popup">
-      <div class="aa-popup__eyebrow" style="color:${bodyColor(site.targetPlanet)}">Parecido com ${escapeHtml(bodyName(site.targetPlanet))}</div>
-      <div class="aa-popup__title">${escapeHtml(site.name)}</div>
-      <div class="aa-popup__meta">${escapeHtml(site.country)} · ${escapeHtml(site.region)}</div>
+      <div class="aa-popup__eyebrow" style="color:${bodyColor(site.targetPlanet)}">${tr("Parecido com", "Similar to")} ${escapeHtml(bodyName(site.targetPlanet))}</div>
+      <div class="aa-popup__title">${escapeHtml(getSiteText(site, 'name'))}</div>
+      <div class="aa-popup__meta">${escapeHtml(getSiteText(site, 'country'))} · ${escapeHtml(getSiteText(site, 'region'))}</div>
       <table class="aa-popup__table">
-        <tr><td>Semelhança (est.)</td><td>${escapeHtml(site.fidelityScore)}%</td></tr>
+        <tr><td>{t("${tr("Semelhança (est.)", "Similarity (est.)")}", "Similarity (est.)")}</td><td>${escapeHtml(site.fidelityScore)}%</td></tr>
         <tr><td>Altitude</td><td>${escapeHtml(site.elevationMeters)} m</td></tr>
-        <tr><td>Coordenadas</td><td>${site.coordinates[0].toFixed(3)}°, ${site.coordinates[1].toFixed(3)}°</td></tr>
-        ${minerals ? `<tr><td>Minerais</td><td>${minerals}</td></tr>` : ''}
+        <tr><td>${tr("Coordenadas", "Coordinates")}</td><td>${site.coordinates[0].toFixed(3)}°, ${site.coordinates[1].toFixed(3)}°</td></tr>
+        ${minerals ? `<tr><td>${tr("Minerais", "Minerals")}</td><td>${minerals}</td></tr>` : ''}
       </table>
       ${
         site.references?.[0]
@@ -159,6 +161,7 @@ function sitePopupHtml(site: AnalogueSite): string {
 
 export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, InteractiveSiteMapProps>(
   ({ sites, allSites, selectedSite, onSelectSite, showNasaEvents, nasaEvents, userLocation, onUsePoint }, ref) => {
+    const { t, lang } = useI18n();
     const rootRef = useRef<HTMLDivElement>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
@@ -237,19 +240,19 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
 
         const el = L.DomUtil.create('div', 'aa-popup');
         el.innerHTML = `
-          <div class="aa-popup__eyebrow">Ponto selecionado</div>
+          <div class="aa-popup__eyebrow">${tr("Ponto selecionado", "Selected point")}</div>
           <div class="aa-popup__title aa-mono">${lat.toFixed(4)}°, ${lng.toFixed(4)}°</div>
           <table class="aa-popup__table">
-            <tr><td>Altitude SRTM</td><td data-role="elev">a consultar…</td></tr>
+            <tr><td>Altitude SRTM</td><td data-role="elev">${tr("a consultar…", "loading…")}</td></tr>
             ${
               nearestSite
-                ? `<tr><td>Análogo mais próximo</td><td>${escapeHtml(nearestSite.name)} (${Math.round(nearestDistanceKm!).toLocaleString('pt-PT')} km)</td></tr>`
+                ? `<tr><td>${tr("Análogo mais próximo", "Nearest analogue")}</td><td>${escapeHtml(getSiteText(nearestSite, 'name'))} (${Math.round(nearestDistanceKm!).toLocaleString(getLocale())} km)</td></tr>`
                 : ''
             }
           </table>
           <div class="aa-popup__actions">
-            <button type="button" data-role="use" class="aa-btn aa-btn--primary">Usar este ponto na análise</button>
-            ${nearestSite ? '<button type="button" data-role="nearest" class="aa-btn">Ir ao análogo</button>' : ''}
+            <button type="button" data-role="use" class="aa-btn aa-btn--primary">${tr("Usar este ponto na análise", "Use this point in the analysis")}</button>
+            ${nearestSite ? `<button type="button" data-role="nearest" class="aa-btn">${tr("Ir ao análogo", "Go to analogue")}</button>` : ''}
           </div>`;
 
         L.DomEvent.disableClickPropagation(el);
@@ -269,7 +272,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
         fetchOfficialElevation(lat, lng).then((dem) => {
           point.elevationMeters = dem.elevationMeters;
           const cell = el.querySelector('[data-role="elev"]');
-          if (cell) cell.textContent = dem.elevationMeters !== null ? `${dem.elevationMeters} m` : 'indisponível';
+          if (cell) cell.textContent = dem.elevationMeters !== null ? `${dem.elevationMeters} m` : tr('indisponível', 'unavailable');
         });
       });
 
@@ -323,7 +326,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
           title: site.name,
         });
         marker.bindTooltip(
-          `<strong>${escapeHtml(site.name)}</strong><br/><span class="aa-mono">${escapeHtml(bodyName(site.targetPlanet))} · ${escapeHtml(site.fidelityScore)}%</span>`,
+          `<strong>${escapeHtml(getSiteText(site, 'name'))}</strong><br/><span class="aa-mono">${escapeHtml(bodyName(site.targetPlanet))} · ${escapeHtml(site.fidelityScore)}%</span>`,
           { direction: 'top', offset: [0, -10] }
         );
         marker.bindPopup(sitePopupHtml(site), { maxWidth: 300 });
@@ -335,7 +338,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
         layer.addLayer(marker);
         siteMarkersRef.current.set(site.id, marker);
       });
-    }, [sites, selectedSite.id]);
+    }, [sites, selectedSite.id, lang]);
 
     // --- Re-frame the map when the filter changes the visible set ---
     const sitesKey = sites.map((s) => s.id).join('|');
@@ -378,14 +381,14 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
           `<div class="aa-popup">
              <div class="aa-popup__eyebrow" style="color:${color}">NASA EONET · ${escapeHtml(ev.category)}</div>
              <div class="aa-popup__title">${escapeHtml(ev.title)}</div>
-             <div class="aa-popup__meta">${ev.date ? `Última observação: ${escapeHtml(ev.date)}` : ''}</div>
+             <div class="aa-popup__meta">${ev.date ? `${tr("Última observação", "Last observation")}: ${escapeHtml(ev.date)}` : ''}</div>
              <div class="aa-popup__meta aa-mono">${ev.coordinates[0].toFixed(3)}°, ${ev.coordinates[1].toFixed(3)}°</div>
            </div>`,
           { maxWidth: 280 }
         );
         layer.addLayer(marker);
       });
-    }, [showNasaEvents, nasaEvents]);
+    }, [showNasaEvents, nasaEvents, lang]);
 
     // --- User GPS location ---
     useEffect(() => {
@@ -408,9 +411,9 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
         icon: L.divIcon({ className: 'aa-user-pin', html: '<div class="aa-user-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
         zIndexOffset: 2000,
       })
-        .bindTooltip('Local de análise', { direction: 'top' })
+        .bindTooltip(tr('Local de análise', 'Analysis location'), { direction: 'top' })
         .addTo(layer);
-    }, [userLocation?.lat, userLocation?.lng, userLocation?.accuracy]);
+    }, [userLocation?.lat, userLocation?.lng, userLocation?.accuracy, lang]);
 
     // --- Guided tour through the visible sites ---
     useEffect(() => {
@@ -473,7 +476,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
             ref={mapContainerRef}
             className="absolute inset-0 z-0"
             role="application"
-            aria-label="Mapa interativo de lugares estudados. Clique num ponto para ver altitude e o análogo mais próximo."
+            aria-label={t("Mapa interativo de lugares estudados. Clique num ponto para ver altitude e o análogo mais próximo.", "Interactive map of studied sites. Select a point to see its elevation and nearest analogue.")}
           />
 
           {/* Top-left: base layer switcher + GIBS date */}
@@ -481,7 +484,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
             {/* Phones: one compact menu instead of three buttons (they collided with Tour/fullscreen). */}
             <label className="sm:hidden flex items-center gap-1 bg-[#FFFFFF]/95 dark:bg-[#161B22]/95 pl-2 pr-1 rounded-xl shadow-sm">
               <Layers className="w-3.5 h-3.5 text-[#64748B]" strokeWidth={1.75} aria-hidden="true" />
-              <span className="sr-only">Tipo de mapa</span>
+              <span className="sr-only">{t("Tipo de mapa", "Map type")}</span>
               <select
                 value={baseLayer}
                 onChange={(e) => setBaseLayer(e.target.value as BaseLayerId)}
@@ -489,7 +492,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
               >
                 {BASE_LAYERS.map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.label}
+                    {t(l.label, l.id === "satellite_hd" ? "HD Satellite" : l.id === "gibs_daily" ? "NASA Daily" : l.label)}
                   </option>
                 ))}
               </select>
@@ -506,7 +509,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
                     baseLayer === l.id ? controlActive : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC]'
                   }`}
                 >
-                  {l.label}
+                  {t(l.label, l.id === "satellite_hd" ? "HD Satellite" : l.id === "gibs_daily" ? "NASA Daily" : l.label)}
                 </button>
               ))}
             </div>
@@ -523,7 +526,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
                 </button>
                 <label className="flex items-center gap-1 px-1">
                   <Calendar className="w-3.5 h-3.5 text-[#64748B]" strokeWidth={1.75} aria-hidden="true" />
-                  <span className="sr-only">Data da imagem NASA</span>
+                  <span className="sr-only">{t("Data da imagem NASA", "NASA image date")}</span>
                   <input
                     type="date"
                     value={gibsDate}
@@ -553,7 +556,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
               onClick={() => setIsTouring((t) => !t)}
               disabled={sites.length < 2}
               className={`${controlBtn} ${isTouring ? controlActive : controlIdle} disabled:opacity-50 disabled:cursor-not-allowed`}
-              title="Percorrer automaticamente os lugares visíveis"
+              title={t("Percorrer automaticamente os lugares visíveis", "Automatically cycle through visible sites")}
             >
               {isTouring ? <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> : <Play className="w-3.5 h-3.5" strokeWidth={1.75} />}
               <span className="hidden sm:inline">{isTouring ? 'Parar tour' : 'Tour'}</span>
@@ -562,8 +565,8 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
               type="button"
               onClick={() => setIsFullscreen((f) => !f)}
               className={`${controlBtn} ${controlIdle}`}
-              aria-label={isFullscreen ? 'Sair de ecrã inteiro' : 'Ecrã inteiro'}
-              title={isFullscreen ? 'Sair de ecrã inteiro (Esc)' : 'Ecrã inteiro'}
+              aria-label={isFullscreen ? t("Sair de ecrã inteiro", "Exit full screen") : t("Ecrã inteiro", "Full screen")}
+              title={isFullscreen ? t("Sair de ecrã inteiro (Esc)", "Exit full screen (Esc)") : t("Ecrã inteiro", "Full screen")}
             >
               {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" strokeWidth={1.75} /> : <Maximize2 className="w-3.5 h-3.5" strokeWidth={1.75} />}
             </button>
@@ -582,7 +585,7 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
                 {showNasaEvents && nasaEvents.length > 0 && (
                   <span className="flex items-center gap-1">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#D97706] ring-2 ring-white" aria-hidden="true" />
-                    Eventos NASA <span className="opacity-60 tabular-nums">{nasaEvents.filter((e) => e.coordinates).length}</span>
+                    {t("Eventos NASA", "NASA Events")} <span className="opacity-60 tabular-nums">{nasaEvents.filter((e) => e.coordinates).length}</span>
                   </span>
                 )}
               </div>
@@ -592,8 +595,8 @@ export const InteractiveSiteMap = forwardRef<InteractiveSiteMapHandle, Interacti
               className="bg-[#0F172A]/80 text-[#F8FAFC] font-mono text-[11px] px-2 py-1 rounded-md tabular-nums"
               aria-live="off"
             >
-              <span className="hidden [@media(hover:hover)]:inline">Passe o cursor ou clique no mapa</span>
-              <span className="[@media(hover:hover)]:hidden">Toque no mapa para analisar um ponto</span>
+              <span className="hidden [@media(hover:hover)]:inline">{t("Passe o cursor ou clique no mapa", "Hover or click on the map")}</span>
+              <span className="[@media(hover:hover)]:hidden">{t("Toque no mapa para analisar um ponto", "Tap the map to analyse a point")}</span>
             </div>
           </div>
         </div>

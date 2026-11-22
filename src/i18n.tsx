@@ -52,7 +52,15 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     currentLang = lang;
-    document.documentElement.lang = lang === 'en' ? 'en' : 'pt';
+    document.documentElement.lang = lang;
+    const title = lang === 'en' ? 'African Analogs — Earth Sites That Resemble Other Worlds' : 'African Analogs — Lugares da Terra Parecidos com Planetas';
+    const description = lang === 'en'
+      ? 'Explore places in Africa and around the world that resemble Mars, the Moon and other worlds using photos, maps and AI.'
+      : 'Explore lugares na África e no mundo parecidos com Marte, a Lua e outros planetas usando fotos, mapas e inteligência artificial.';
+    document.title = title;
+    document.querySelector('meta[name="description"]')?.setAttribute('content', description);
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', title);
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', description);
     try {
       localStorage.setItem(STORAGE_KEY, lang);
     } catch {

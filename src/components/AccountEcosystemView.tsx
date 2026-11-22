@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AnalogueSite,
@@ -130,6 +131,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
   onOpenSampleInResearch,
   onOpenMyProfileInNetwork,
 }) => {
+  const { t } = useI18n();
   // Simple 2-step onboarding + login switcher
   const [authTab, setAuthTab] = useState<'register' | 'login'>('register');
   const [regStep, setRegStep] = useState<1 | 2>(1);
@@ -352,7 +354,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
       return;
     }
     if (regPassword !== regConfirmPassword) {
-      setAuthError('As duas senhas digitadas não estão iguais.');
+      setAuthError(t("As duas senhas digitadas não estão iguais.", "The passwords do not match."));
       return;
     }
     if (!regCodename.trim()) {
@@ -382,7 +384,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
       });
       setRegStep(1);
     } catch (err: any) {
-      setAuthError(err?.message || 'Não foi possível criar a conta.');
+      setAuthError(err?.message || t("Não foi possível criar a conta.", "Could not create your account."));
     } finally {
       setIsSubmittingAuth(false);
     }
@@ -396,7 +398,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
       await onLogin(loginIdentifier, loginPassword);
       setLoginPassword('');
     } catch (err: any) {
-      setLoginError(err?.message || 'E-mail/apelido ou senha inválidos.');
+      setLoginError(err?.message || t("E-mail/apelido ou senha inválidos.", "Invalid email address, username or password."));
     } finally {
       setIsSubmittingAuth(false);
     }
@@ -620,7 +622,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
       setPwdMessage('Sua senha foi atualizada.');
       setTimeout(() => setPwdMessage(null), 4000);
     } catch (err: any) {
-      setPwdError(err?.message || 'Não foi possível alterar a senha.');
+      setPwdError(err?.message || t("Não foi possível alterar a senha.", "Could not change your password."));
     }
   };
 
@@ -651,13 +653,13 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
         <section className="lg:col-span-5 bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 sm:p-8 shadow-xs flex flex-col justify-between space-y-6">
           <div className="space-y-4">
             <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA]">
-              Comunidade African Analogs
+              {t("Comunidade African Analogs", "African Analogs Community")}
             </span>
             <h1 className="font-poppins text-2xl sm:text-3xl font-bold tracking-tight text-[#0F172A] dark:text-[#F0F6FC] leading-tight">
-              Crie seu perfil simples em poucos segundos.
+              {t("Crie seu perfil simples em poucos segundos.", "Create your profile in seconds.")}
             </h1>
             <p className="text-sm text-[#475569] dark:text-[#94A3B8] leading-relaxed">
-              Não precisa ser cientista para participar. Com uma conta você salva suas descobertas, envia fotos e conversa com outras pessoas interessadas em planetas.
+              {t("Não precisa ser cientista para participar. Com uma conta você salva suas descobertas, envia fotos e conversa com outras pessoas interessadas em planetas.", "Anyone can participate. Create an account to save discoveries, upload photos and talk to others interested in planets.")}
             </p>
 
             <div className="space-y-2.5 pt-2">
@@ -699,7 +701,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                       </div>
                       <div className="text-xs text-[#475569] dark:text-[#94A3B8] truncate">{acc.email}</div>
                     </div>
-                    <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] shrink-0">Entrar</span>
+                    <span className="text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] shrink-0">{t("Entrar", "Sign In")}</span>
                   </button>
                 ))}
               </div>
@@ -724,7 +726,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 }`}
               >
                 <UserPlus className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Criar Conta</span>
+                <span>{t("Criar Conta", "Create Account")}</span>
               </button>
               <button
                 type="button"
@@ -739,7 +741,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 }`}
               >
                 <LogIn className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Entrar</span>
+                <span>{t("Entrar", "Sign In")}</span>
               </button>
             </div>
 
@@ -758,16 +760,16 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 <div className="space-y-4">
                   <div>
                     <h2 className="font-poppins text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                      Passo 1 — Seus dados básicos
+                      {t("Passo 1 — Seus dados básicos", "Step 1 · Your basic details")}
                     </h2>
                     <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                      Informe seu nome, e-mail e crie uma senha de acesso.
+                      {t("Informe seu nome, e-mail e crie uma senha de acesso.", "Enter your name and email address, then create a password.")}
                     </p>
                   </div>
 
                   <div>
                     <label htmlFor="reg-name" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                      Seu Nome *
+                      {t("Seu Nome *", "Your Name *")}
                     </label>
                     <input
                       id="reg-name"
@@ -778,14 +780,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                         setRegName(e.target.value);
                         setRegCodename(normalizeCodename(e.target.value));
                       }}
-                      placeholder="Ex: Maria Silva"
+                      placeholder={t("Ex: Maria Silva", "E.g. Maria Silva")}
                       className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                     />
                   </div>
 
                   <div>
                     <label htmlFor="reg-email" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                      Seu E-mail *
+                      {t("Seu E-mail *", "Your Email Address *")}
                     </label>
                     <input
                       id="reg-email"
@@ -793,7 +795,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                       type="email"
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="voce@email.com"
+                      placeholder={t("voce@email.com", "you@example.com")}
                       className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                     />
                   </div>
@@ -801,7 +803,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
                       <label htmlFor="reg-pwd" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Senha (mín. 8 caracteres) *
+                        {t("Senha (mín. 8 caracteres) *", "Password (at least 8 characters) *")}
                       </label>
                       <div className="relative">
                         <input
@@ -817,7 +819,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowRegPassword((p) => !p)}
-                          aria-label={showRegPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                          aria-label={showRegPassword ? t('Ocultar senha', 'Hide password') : t('Mostrar senha', 'Show password')}
                           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#475569] dark:text-[#94A3B8] cursor-pointer"
                         >
                           {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -827,7 +829,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                     <div>
                       <label htmlFor="reg-pwd-confirm" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Repetir Senha *
+                        {t("Repetir Senha *", "Repeat Password *")}
                       </label>
                       <input
                         id="reg-pwd-confirm"
@@ -855,17 +857,17 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     type="submit"
                     className="w-full min-h-[44px] py-2.5 px-5 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Continuar</span>
+                    <span>{t("Continuar", "Continue")}</span>
                     <ArrowRight className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
                   </button>
                   <p className="text-center text-xs text-[#475569] dark:text-[#94A3B8]">
-                    Já tem conta?{' '}
+                    {t("Já tem conta?", "Already have an account?")}{' '}
                     <button
                       type="button"
                       onClick={() => setAuthTab('login')}
                       className="text-[#1E3A8A] dark:text-[#60A5FA] font-semibold hover:underline cursor-pointer"
                     >
-                      Entrar
+                      {t("Entrar", "Sign In")}
                     </button>
                   </p>
                 </div>
@@ -876,15 +878,15 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h2 className="font-poppins text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                        Passo 2 — Seu perfil
+                        {t("Passo 2 — Seu perfil", "Step 2 · Your profile")}
                       </h2>
                       <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                        Escolha como você aparece para outras pessoas (pode mudar depois).
+                        {t("Escolha como você aparece para outras pessoas (pode mudar depois).", "Choose how you appear to others. You can change it later.")}
                       </p>
                     </div>
                     <img
                       src={regAvatarUrl || generateDynamicAvatarSvg(regName || 'Perfil')}
-                      alt="Prévia da foto de perfil"
+                      alt={t("Prévia da foto de perfil", "Profile photo preview")}
                       className="w-12 h-12 rounded-full object-cover bg-[#F1F5F9] dark:bg-[#0D1117] shrink-0"
                     />
                   </div>
@@ -892,7 +894,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label htmlFor="reg-codename" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Apelido (@nome) *
+                        {t("Apelido (@nome) *", "Username (@name) *")}
                       </label>
                       <input
                         id="reg-codename"
@@ -906,14 +908,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     </div>
                     <div>
                       <label htmlFor="reg-role" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        O que você faz (opcional)
+                        {t("O que você faz (opcional)", "Your occupation (optional)")}
                       </label>
                       <input
                         id="reg-role"
                         type="text"
                         value={regRole}
                         onChange={(e) => setRegRole(e.target.value)}
-                        placeholder="Ex: Estudante, Professor, Curioso"
+                        placeholder={t("Ex: Estudante, Professor, Curioso", "E.g. Student, Teacher, Enthusiast")}
                         className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                       />
                     </div>
@@ -922,27 +924,27 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label htmlFor="reg-country" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        País ou Cidade
+                        {t("País ou Cidade", "Country or City")}
                       </label>
                       <input
                         id="reg-country"
                         type="text"
                         value={regCountry}
                         onChange={(e) => setRegCountry(e.target.value)}
-                        placeholder="Ex: Angola, Brasil..."
+                        placeholder={t("Ex: Angola, Brasil...", "E.g. Angola, Brazil...")}
                         className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                       />
                     </div>
                     <div>
                       <label htmlFor="reg-inst" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Escola, Empresa ou Grupo (opcional)
+                        {t("Escola, Empresa ou Grupo (opcional)", "School, Company or Group (optional)")}
                       </label>
                       <input
                         id="reg-inst"
                         type="text"
                         value={regInstitution}
                         onChange={(e) => setRegInstitution(e.target.value)}
-                        placeholder="Opcional"
+                        placeholder={t("Opcional", "Optional")}
                         className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                       />
                     </div>
@@ -950,7 +952,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                   <div className="space-y-2">
                     <span className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                      Planetas e satélites naturais de interesse
+                      {t("Planetas e satélites naturais de interesse", "Planets and moons of interest")}
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {QUICK_PLANET_OPTIONS.map((p) => {
@@ -973,7 +975,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     </div>
                     <details className="rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2.5">
                       <summary className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer select-none">
-                        Ver todos os planetas e satélites naturais ({EXTENDED_CELESTIAL_OPTIONS.length}+)
+                        {t("Ver todos os planetas e satélites naturais", "View all planets and moons")} ({EXTENDED_CELESTIAL_OPTIONS.length}+)
                       </summary>
                       <div className="flex flex-wrap gap-1.5 pt-2">
                         {EXTENDED_CELESTIAL_OPTIONS.map((p) => {
@@ -1005,7 +1007,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                         onChange={(e) => setRegOpenToContrib(e.target.checked)}
                         className="rounded accent-[#1E3A8A]"
                       />
-                      <span>Aceitar mensagens e conversas</span>
+                      <span>{t("Aceitar mensagens e conversas", "Allow messages and discussions")}</span>
                     </label>
 
                     <label className="py-1.5 px-3 rounded-xl bg-[#F1F5F9] dark:bg-[#0D1117] hover:bg-[#E2E8F0] dark:hover:bg-[#21262D] text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] inline-flex items-center gap-1.5 cursor-pointer">
@@ -1038,7 +1040,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     className="min-h-[42px] py-2 px-4 bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    <span>Voltar</span>
+                    <span>{t("Voltar", "Back")}</span>
                   </button>
                   <button
                     type="submit"
@@ -1056,16 +1058,16 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
               <div className="space-y-4">
                 <div>
                   <h2 className="font-poppins text-lg font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                    Entrar na sua conta
+                    {t("Entrar na sua conta", "Sign in to your account")}
                   </h2>
                   <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                    Use o e-mail ou @apelido que você cadastrou.
+                    {t("Use o e-mail ou @apelido que você cadastrou.", "Use the email address or @username you registered with.")}
                   </p>
                 </div>
 
                 <div>
                   <label htmlFor="login-id" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                    E-mail ou Apelido
+                    {t("E-mail ou Apelido", "Email Address or Username")}
                   </label>
                   <input
                     id="login-id"
@@ -1073,14 +1075,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     type="text"
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="voce@email.com ou @apelido"
+                    placeholder={t("voce@email.com ou @apelido", "you@example.com or @username")}
                     className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                   />
                 </div>
 
                 <div>
                   <label htmlFor="login-pwd" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                    Senha
+                    {t("Senha", "Password")}
                   </label>
                   <div className="relative">
                     <input
@@ -1095,7 +1097,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowLoginPassword((p) => !p)}
-                      aria-label={showLoginPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                      aria-label={showLoginPassword ? t('Ocultar senha', 'Hide password') : t('Mostrar senha', 'Show password')}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#475569] dark:text-[#94A3B8] cursor-pointer"
                     >
                       {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1121,13 +1123,13 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <span>{isSubmittingAuth ? 'Entrando...' : 'Entrar'}</span>
                 </button>
                 <p className="text-center text-xs text-[#475569] dark:text-[#94A3B8]">
-                  Ainda não tem conta?{' '}
+                  {t("Ainda não tem conta?", "New here?")}{' '}
                   <button
                     type="button"
                     onClick={() => setAuthTab('register')}
                     className="text-[#1E3A8A] dark:text-[#60A5FA] font-semibold hover:underline cursor-pointer"
                   >
-                    Criar conta grátis
+                    {t("Criar conta grátis", "Create a free account")}
                   </button>
                 </p>
               </div>
@@ -1154,7 +1156,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 className="w-20 h-20 rounded-full object-cover bg-[#F1F5F9] dark:bg-[#0D1117]"
               />
               <label
-                title="Trocar foto de perfil"
+                title={t("Trocar foto de perfil", "Change profile photo")}
                 className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-[#1E3A8A] dark:bg-[#2563EB] text-[#FFFFFF] flex items-center justify-center shadow-sm cursor-pointer hover:bg-[#1E40AF]"
               >
                 <Camera className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
@@ -1206,7 +1208,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
               className="min-h-[40px] py-2 px-4 rounded-xl bg-[#F1F5F9] dark:bg-[#0D1117] hover:bg-[#E2E8F0] dark:hover:bg-[#21262D] text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Users className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-              <span>Ver na Comunidade</span>
+              <span>{t("Ver na Comunidade", "View in the Community")}</span>
             </button>
             <button
               type="button"
@@ -1214,7 +1216,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
               className="min-h-[40px] py-2 px-4 rounded-xl bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-xs font-medium text-[#B91C1C] dark:text-[#FCA5A5] inline-flex items-center gap-1.5 cursor-pointer"
             >
               <LogOut className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-              <span>Sair</span>
+              <span>{t("Sair", "Sign Out")}</span>
             </button>
           </div>
         </div>
@@ -1223,19 +1225,19 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-1">
           <div className="lg:col-span-6 grid grid-cols-3 gap-3">
             <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
-              <div className="text-xs text-[#475569] dark:text-[#94A3B8]">Minhas Pesquisas</div>
+              <div className="text-xs text-[#475569] dark:text-[#94A3B8]">{t("Minhas Pesquisas", "My Research")}</div>
               <div className="text-xl font-bold font-mono text-[#0F172A] dark:text-[#F0F6FC] tabular-nums">
                 {myPublishedSamples.length}
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
-              <div className="text-xs text-[#475569] dark:text-[#94A3B8]">Conexões</div>
+              <div className="text-xs text-[#475569] dark:text-[#94A3B8]">{t("Conexões", "Connections")}</div>
               <div className="text-xl font-bold font-mono text-[#1E3A8A] dark:text-[#60A5FA] tabular-nums">
                 {connectedIds.length}
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
-              <div className="text-xs text-[#475569] dark:text-[#94A3B8]">Grupos</div>
+              <div className="text-xs text-[#475569] dark:text-[#94A3B8]">{t("Grupos", "Groups")}</div>
               <div className="text-xl font-bold font-mono text-[#0F766E] dark:text-[#2DD4BF] tabular-nums">
                 {activeNetworkCount}
               </div>
@@ -1245,7 +1247,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
           <div className="lg:col-span-6 flex lg:justify-end">
             <div
               role="tablist"
-              aria-label="Seções do meu perfil"
+              aria-label={t("Seções do meu perfil", "My profile sections")}
               className="w-full lg:w-auto grid grid-cols-3 gap-1 p-1 bg-[#F1F5F9] dark:bg-[#0D1117] rounded-xl"
             >
               <button
@@ -1260,7 +1262,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-                <span className="truncate">Minhas Pesquisas</span>
+                <span className="truncate">{t("Minhas Pesquisas", "My Research")}</span>
               </button>
 
               <button
@@ -1275,7 +1277,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 }`}
               >
                 <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-                <span className="truncate">Publicar</span>
+                <span className="truncate">{t("Publicar", "Publish")}</span>
               </button>
 
               <button
@@ -1290,7 +1292,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 }`}
               >
                 <Settings className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-                <span className="truncate">Editar &amp; Conta</span>
+                <span className="truncate">{t("Editar & Conta", "Edit Profile and Account")}</span>
               </button>
             </div>
           </div>
@@ -1311,7 +1313,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
             events={collectContributions(currentUser, { samples, studyThreads, networkGroups })}
             ownerLabel={currentUser.name}
             isSelf
-            heading="As suas contribuições"
+            heading={t("As suas contribuições", "Your contributions")}
           />
         </section>
       )}
@@ -1325,7 +1327,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 Suas Pesquisas Salvas ({myPublishedSamples.length})
               </h2>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                Tudo o que você publicou fica visível para receber comentários e comparações.
+                {t("Tudo o que você publicou fica visível para receber comentários e comparações.", "Others can see, comment on and compare the research you publish.")}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1342,7 +1344,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 className="py-2 px-4 rounded-xl bg-[#1E3A8A] dark:bg-[#2563EB] text-xs font-medium text-[#FFFFFF] inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
-                <span>Nova Publicação</span>
+                <span>{t("Nova Publicação", "New Publication")}</span>
               </button>
             </div>
           </div>
@@ -1350,14 +1352,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
           {myPublishedSamples.length === 0 ? (
             <div className="p-8 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] text-center space-y-3">
               <p className="text-sm text-[#475569] dark:text-[#94A3B8]">
-                Você ainda não publicou nenhuma pesquisa no seu perfil.
+                {t("Você ainda não publicou nenhuma pesquisa no seu perfil.", "You haven’t published any research on your profile yet.")}
               </p>
               <button
                 type="button"
                 onClick={handleStartNewPublish}
                 className="py-2 px-4 rounded-xl bg-[#1E3A8A] dark:bg-[#2563EB] text-xs font-medium text-[#FFFFFF] cursor-pointer"
               >
-                Criar primeira publicação
+                {t("Criar primeira publicação", "Create your first publication")}
               </button>
             </div>
           ) : (
@@ -1389,14 +1391,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                         className="py-1.5 px-2.5 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-xs font-medium text-[#0F766E] dark:text-[#2DD4BF] hover:bg-[#F1F5F9] inline-flex items-center gap-1 cursor-pointer"
                       >
                         <Pencil className="w-3 h-3" strokeWidth={1.75} />
-                        <span>Editar</span>
+                        <span>{t("Editar", "Edit")}</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => onOpenSampleInResearch(smp)}
                         className="py-1.5 px-2.5 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] hover:bg-[#F1F5F9] cursor-pointer"
                       >
-                        Abrir
+                        {t("Abrir", "Open")}
                       </button>
                       <button
                         type="button"
@@ -1424,7 +1426,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 {editingSampleId ? 'Editar Artigo & Dados do Painel' : 'Publicar Novo Artigo ou Descoberta'}
               </h2>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                Todos os dados da pesquisa e o lugar são inseridos manualmente por você. O Copiloto IA serve apenas para ajudar na interpretação.
+                {t("Todos os dados da pesquisa e o lugar são inseridos manualmente por você. O Copiloto IA serve apenas para ajudar na interpretação.", "Enter the research data and location manually. The AI copilot helps you interpret the results.")}
               </p>
             </div>
 
@@ -1435,7 +1437,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 className="py-2 px-3.5 rounded-xl bg-[#F1F5F9] dark:bg-[#0D1117] hover:bg-[#E2E8F0] dark:hover:bg-[#21262D] text-xs font-medium text-[#0F766E] dark:text-[#2DD4BF] inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <BookOpen className="w-3.5 h-3.5" strokeWidth={1.75} />
-                <span>Carregar Meus Dados Atuais</span>
+                <span>{t("Carregar Meus Dados Atuais", "Load My Current Data")}</span>
               </button>
 
               {editingSampleId && (
@@ -1444,7 +1446,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   onClick={handleStartNewPublish}
                   className="py-2 px-3 rounded-xl bg-[#F1F5F9] dark:bg-[#0D1117] text-xs font-medium text-[#475569] dark:text-[#94A3B8] cursor-pointer"
                 >
-                  Cancelar Edição
+                  {t("Cancelar Edição", "Cancel Editing")}
                 </button>
               )}
             </div>
@@ -1455,7 +1457,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-semibold text-[#1E3A8A] dark:text-[#60A5FA] inline-flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
-                  <span>Copiloto IA — Análise de Apoio (não preenche dados sozinho)</span>
+                  <span>{t("Copiloto IA — Análise de Apoio (não preenche dados sozinho)", "AI Copilot Assessment")}</span>
                 </div>
                 <button
                   type="button"
@@ -1466,7 +1468,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   }
                   className="py-1 px-2.5 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] shadow-xs cursor-pointer"
                 >
-                  Inserir comentário na conclusão
+                  {t("Inserir comentário na conclusão", "Add comment to the conclusion")}
                 </button>
               </div>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] max-h-24 overflow-y-auto whitespace-pre-wrap leading-relaxed">
@@ -1479,7 +1481,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <div>
                 <label htmlFor="pub-title" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Título do Artigo *
+                  {t("Título do Artigo *", "Article Title *")}
                 </label>
                 <input
                   id="pub-title"
@@ -1487,14 +1489,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   type="text"
                   value={studyTitle}
                   onChange={(e) => setStudyTitle(e.target.value)}
-                  placeholder="Ex: Dunas Secas do Namibe"
+                  placeholder={t("Ex: Dunas Secas do Namibe", "E.g. Dry Dunes of the Namib")}
                   className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 />
               </div>
 
               <div>
                 <label htmlFor="pub-location" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Lugar (escrito manualmente) *
+                  {t("Lugar (escrito manualmente) *", "Location (entered manually) *")}
                 </label>
                 <input
                   id="pub-location"
@@ -1503,7 +1505,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   list="pub-location-suggestions"
                   value={studyCustomLocation}
                   onChange={(e) => setStudyCustomLocation(e.target.value)}
-                  placeholder="Ex: Deserto do Namibe, Angola"
+                  placeholder={t("Ex: Deserto do Namibe, Angola", "E.g. Namib Desert, Angola")}
                   className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 />
                 <datalist id="pub-location-suggestions">
@@ -1515,7 +1517,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
               <div>
                 <label htmlFor="pub-planet" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                  Parece com qual planeta ou satélite natural?
+                  {t("Parece com qual planeta ou satélite natural?", "Which planet or moon does it resemble?")}
                 </label>
                 <select
                   id="pub-planet"
@@ -1523,21 +1525,21 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   onChange={(e) => setStudyPlanet(e.target.value as PlanetaryTarget)}
                   className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3.5 py-2.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
                 >
-                  <optgroup label="Planetas do Sistema Solar">
+                  <optgroup label={t("Planetas do Sistema Solar", "Solar System Planets")}>
                     {PLANET_BODIES.map((p) => (
                       <option key={p.id} value={p.id}>
                         {bodyOptionLabel(p)}
                       </option>
                     ))}
                   </optgroup>
-                  <optgroup label="Planetas Anões">
+                  <optgroup label={t("Planetas Anões", "Dwarf Planets")}>
                     {DWARF_PLANET_BODIES.map((p) => (
                       <option key={p.id} value={p.id}>
                         {bodyOptionLabel(p)}
                       </option>
                     ))}
                   </optgroup>
-                  <optgroup label="Satélites Naturais (Luas)">
+                  <optgroup label={t("Satélites Naturais (Luas)", "Natural Satellites (Moons)")}>
                     {SATELLITE_BODIES.map((p) => (
                       <option key={p.id} value={p.id}>
                         {bodyOptionLabel(p)}
@@ -1550,14 +1552,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
             <div>
               <label htmlFor="pub-notes" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                Texto, Observações &amp; Conclusão do Artigo
+                {t("Texto, Observações & Conclusão do Artigo", "Article Text, Observations and Conclusion")}
               </label>
               <textarea
                 id="pub-notes"
                 rows={4}
                 value={studyNotes}
                 onChange={(e) => setStudyNotes(e.target.value)}
-                placeholder="Escreva ou edite o texto da sua análise com a IA, o que encontrou no local e sua conclusão..."
+                placeholder={t("Escreva ou edite o texto da sua análise com a IA, o que encontrou no local e sua conclusão...", "Write or edit your analysis, including what you found at the site and your conclusion...")}
                 className="w-full bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] text-sm p-3.5 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
               />
             </div>
@@ -1573,13 +1575,13 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
                   <span>
                     {showChartEditor
-                      ? 'Ocultar editor de dados e gráficos do painel'
-                      : 'Editar dados do painel e gráficos (notas, minerais, umidade e pH)'}
+                      ? t("Ocultar editor de dados e gráficos do painel", "Hide the dashboard data editor")
+                      : t("Editar dados do painel e gráficos (notas, minerais, umidade e pH)", "Edit dashboard and chart data (scores, minerals, moisture and pH)")}
                   </span>
                 </button>
 
                 <span className="text-xs font-mono font-semibold text-[#0F766E] dark:text-[#2DD4BF] tabular-nums">
-                  Semelhança nos gráficos: {studyScores.total}%
+                  {t("Semelhança nos gráficos:", "Similarity in the charts:")} {studyScores.total}%
                 </span>
               </div>
 
@@ -1587,14 +1589,14 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 <div className="space-y-4 pt-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                      Notas por critério (0–100%)
+                      {t("Notas por critério (0–100%)", "Scores by criterion (0–100%)")}
                     </span>
                     <button
                       type="button"
                       onClick={handleRecalculateScoresFromSoil}
                       className="py-1 px-2.5 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer shadow-xs"
                     >
-                      Recalcular pelo solo
+                      {t("Recalcular pelo solo", "Recalculate from soil data")}
                     </button>
                   </div>
 
@@ -1635,7 +1637,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label htmlFor="pub-minerals" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Minerais (ex.: Basalto: 45, Ferro: 35, Areia: 20)
+                        {t("Minerais (ex.: Basalto: 45, Ferro: 35, Areia: 20)", "Minerals (e.g. Basalt: 45, Iron: 35, Sand: 20)")}
                       </label>
                       <input
                         id="pub-minerals"
@@ -1647,7 +1649,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     </div>
                     <div>
                       <label htmlFor="pub-rock" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Tipo de rocha ou solo
+                        {t("Tipo de rocha ou solo", "Rock or soil type")}
                       </label>
                       <input
                         id="pub-rock"
@@ -1662,7 +1664,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label htmlFor="pub-aw" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Atividade de água (aw, 0–1)
+                        {t("Atividade de água (aw, 0–1)", "Water activity (aw, 0–1)")}
                       </label>
                       <input
                         id="pub-aw"
@@ -1692,7 +1694,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     </div>
                     <div>
                       <label htmlFor="pub-depth" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Profundidade (cm)
+                        {t("Profundidade (cm)", "Depth (cm)")}
                       </label>
                       <input
                         id="pub-depth"
@@ -1706,7 +1708,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     </div>
                     <div>
                       <label htmlFor="pub-por" className="block text-xs text-[#475569] dark:text-[#94A3B8] mb-1">
-                        Porosidade (%)
+                        {t("Porosidade (%)", "Porosity (%)")}
                       </label>
                       <input
                         id="pub-por"
@@ -1723,7 +1725,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                   <div>
                     <span className="block text-[11px] font-medium text-[#475569] dark:text-[#94A3B8] mb-1.5">
-                      Composição química da rocha (%)
+                      {t("Composição química da rocha (%)", "Rock chemical composition (%)")}
                     </span>
                     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       {Object.entries(studyXrf).map(([oxide, val]) => (
@@ -1758,7 +1760,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
               type="submit"
               className="w-full sm:w-auto min-h-[42px] py-2.5 px-6 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] text-[#FFFFFF] text-sm font-medium rounded-xl transition-colors cursor-pointer"
             >
-              {editingSampleId ? 'Salvar Alterações do Artigo & Painel' : 'Publicar Artigo no Meu Perfil'}
+              {editingSampleId ? t("Salvar Alterações do Artigo & Painel", "Save Article and Dashboard Changes") : t("Publicar Artigo no Meu Perfil", "Publish Article on My Profile")}
             </button>
           </form>
         </section>
@@ -1771,10 +1773,10 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC]">
-                  Editar Meus Dados
+                  {t("Editar Meus Dados", "Edit My Details")}
                 </h2>
                 <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                  Deixe seu perfil simples e com a sua cara.
+                  {t("Deixe seu perfil simples e com a sua cara.", "Personalise your profile.")}
                 </p>
               </div>
               <button
@@ -1787,7 +1789,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 className="py-1.5 px-3 rounded-xl bg-[#F1F5F9] dark:bg-[#0D1117] text-xs font-medium text-[#1E3A8A] dark:text-[#60A5FA] inline-flex items-center gap-1 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Gerar Iniciais</span>
+                <span>{t("Gerar Iniciais", "Use Initials")}</span>
               </button>
             </div>
 
@@ -1796,7 +1798,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="edit-name" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                      Nome
+                      {t("Nome", "Name")}
                     </label>
                     <input
                       id="edit-name"
@@ -1809,7 +1811,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   </div>
                   <div>
                     <label htmlFor="edit-codename" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                      Apelido (@nome)
+                      {t("Apelido (@nome)", "Username (@name)")}
                     </label>
                     <input
                       id="edit-codename"
@@ -1825,7 +1827,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="edit-role" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                      O que você faz
+                      {t("O que você faz", "Your occupation")}
                     </label>
                     <input
                       id="edit-role"
@@ -1837,7 +1839,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   </div>
                   <div>
                     <label htmlFor="edit-country" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                      Cidade / País
+                      {t("Cidade / País", "City / Country")}
                     </label>
                     <input
                       id="edit-country"
@@ -1851,7 +1853,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                 <div>
                   <label htmlFor="edit-inst" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                    Escola, Universidade ou Equipe (opcional)
+                    {t("Escola, Universidade ou Equipe (opcional)", "School, University or Team (optional)")}
                   </label>
                   <input
                     id="edit-inst"
@@ -1864,7 +1866,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                 <div className="space-y-2">
                   <span className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8]">
-                    Planetas e Satélites de Interesse
+                    {t("Planetas e Satélites de Interesse", "Planets and Moons of Interest")}
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {QUICK_PLANET_OPTIONS.map((p) => {
@@ -1887,7 +1889,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   </div>
                   <details className="rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] p-2.5">
                     <summary className="text-[11px] font-medium text-[#1E3A8A] dark:text-[#60A5FA] cursor-pointer select-none">
-                      Mais planetas e satélites naturais ({EXTENDED_CELESTIAL_OPTIONS.length}+)
+                      {t("Mais planetas e satélites naturais", "More planets and moons")} ({EXTENDED_CELESTIAL_OPTIONS.length}+)
                     </summary>
                     <div className="flex flex-wrap gap-1.5 pt-2">
                       {EXTENDED_CELESTIAL_OPTIONS.map((p) => {
@@ -1913,7 +1915,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                 <div>
                   <label htmlFor="edit-bio" className="block text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">
-                    Sobre você
+                    {t("Sobre você", "About you")}
                   </label>
                   <textarea
                     id="edit-bio"
@@ -1926,22 +1928,22 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
 
                 <details className="bg-[#F8FAFC] dark:bg-[#0D1117] rounded-xl p-3 text-xs">
                   <summary className="font-medium text-[#475569] dark:text-[#94A3B8] cursor-pointer">
-                    Informações acadêmicas opcionais (ORCID / Área)
+                    {t("Informações acadêmicas opcionais (ORCID / Área)", "Optional academic details (ORCID / Field)")}
                   </summary>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2.5">
                     <input
                       type="text"
                       value={editSpecialty}
                       onChange={(e) => setEditSpecialty(e.target.value)}
-                      placeholder="Área de estudo"
-                      aria-label="Área de estudo"
+                      placeholder={t("Área de estudo", "Field of study")}
+                      aria-label={t("Área de estudo", "Field of study")}
                       className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-xs px-3 py-2 rounded-lg"
                     />
                     <input
                       type="text"
                       value={editOrcid}
                       onChange={(e) => setEditOrcid(e.target.value)}
-                      placeholder="ORCID (se tiver)"
+                      placeholder={t("ORCID (se tiver)", "ORCID (if available)")}
                       aria-label="ORCID"
                       className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-xs px-3 py-2 rounded-lg"
                     />
@@ -1955,7 +1957,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                     onChange={(e) => setEditOpenToContrib(e.target.checked)}
                     className="rounded accent-[#1E3A8A]"
                   />
-                  <span>Receber mensagens e convites na comunidade</span>
+                  <span>{t("Receber mensagens e convites na comunidade", "Receive community messages and invitations")}</span>
                 </label>
 
                 {profileNotice && (
@@ -1970,7 +1972,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 type="submit"
                 className="w-full min-h-[42px] py-2 px-4 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-sm font-medium rounded-xl transition-colors cursor-pointer"
               >
-                Salvar Perfil
+                {t("Salvar Perfil", "Save Profile")}
               </button>
             </form>
           </section>
@@ -1979,22 +1981,22 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-poppins text-base font-bold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                <span>Senha &amp; Cópia de Segurança</span>
+                <span>{t("Senha & Cópia de Segurança", "Password and Backup")}</span>
               </h2>
             </div>
 
             {activeAccountRecord && (
               <form onSubmit={handlePasswordChange} className="space-y-3 bg-[#F8FAFC] dark:bg-[#0D1117] p-4 rounded-xl">
                 <div className="text-xs font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
-                  Trocar minha senha
+                  {t("Trocar minha senha", "Change my password")}
                 </div>
                 <input
                   type="password"
                   required
                   value={curPwd}
                   onChange={(e) => setCurPwd(e.target.value)}
-                  placeholder="Senha atual"
-                  aria-label="Senha atual"
+                  placeholder={t("Senha atual", "Current password")}
+                  aria-label={t("Senha atual", "Current password")}
                   className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3 py-2 rounded-lg"
                 />
                 <input
@@ -2003,8 +2005,8 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   minLength={8}
                   value={newPwd}
                   onChange={(e) => setNewPwd(e.target.value)}
-                  placeholder="Nova senha (mín. 8 caracteres)"
-                  aria-label="Nova senha"
+                  placeholder={t("Nova senha (mín. 8 caracteres)", "New password (at least 8 characters)")}
+                  aria-label={t("Nova senha", "New password")}
                   className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3 py-2 rounded-lg"
                 />
                 {pwdError && <div className="text-xs text-[#B91C1C] dark:text-[#FCA5A5]">{pwdError}</div>}
@@ -2013,17 +2015,17 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   type="submit"
                   className="w-full py-2 px-3 rounded-lg bg-[#1E3A8A] dark:bg-[#2563EB] text-xs font-medium text-[#FFFFFF] cursor-pointer"
                 >
-                  Atualizar Senha
+                  {t("Atualizar Senha", "Update Password")}
                 </button>
               </form>
             )}
 
             <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117] space-y-2.5">
               <div className="text-xs font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
-                Guardar uma cópia dos seus dados
+                {t("Guardar uma cópia dos seus dados", "Save a copy of your data")}
               </div>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-                Baixe um arquivo com seu perfil e pesquisas publicadas para guardar onde preferir.
+                {t("Baixe um arquivo com seu perfil e pesquisas publicadas para guardar onde preferir.", "Download a copy of your profile and published research.")}
               </p>
               <button
                 type="button"
@@ -2031,7 +2033,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                 className="w-full py-2 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] hover:bg-[#F1F5F9] text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Download className="w-3.5 h-3.5 text-[#0F766E] dark:text-[#2DD4BF]" strokeWidth={1.75} />
-                <span>Baixar Meus Dados</span>
+                <span>{t("Baixar Meus Dados", "Download My Data")}</span>
               </button>
             </div>
           </section>

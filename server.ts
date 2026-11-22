@@ -166,7 +166,7 @@ Diretrizes de resposta:
     }
 
     const nemotronMessages: NemotronMessage[] = [
-      { role: 'system', content: systemInstruction },
+      { role: 'system', content: `${systemInstruction}\nRespond in ${req.body.lang === 'en' ? 'English' : 'Portuguese'}.` },
     ];
 
     if (contextPrompt) {
@@ -281,7 +281,7 @@ Analise os dados visuais extraídos desta imagem de terreno, rocha, DEM GeoTIFF 
 
 Avalie se este terreno/rocha possui características análogas às de ${targetLabel}.
 
-Responda obrigatoriamente neste formato textual exato em português (NÃO coloque parênteses ao redor das respostas):
+Responda obrigatoriamente neste formato textual exato em ${req.body.lang === 'en' ? 'English' : 'Portuguese'}, mantendo os nomes das tags (NÃO coloque parênteses ao redor das respostas):
 [CORPO_ANALOGO_PROVAVEL]: nome em inglês do planeta ou satélite natural mais compatível (ex: Mercury, Venus, Mars, Moon, Phobos, Io, Europa, Ganymede, Callisto, Enceladus, Titan, Triton, Ceres, Pluto, etc.)
 [ESCORE_FIDELIDADE]: número inteiro de 0 a 100
 [ANALOGO_TERRESTRE_MAIS_PROXIMO]: ex: Depressão de Danakil & Dallol, Estrutura de Richat, Mar de Areia do Namibe, Domo de Impacto de Vredefort, Lago Natron, Deserto do Atacama, Geopark de Lanzarote ou Borup Fiord Pass
@@ -294,7 +294,7 @@ Responda obrigatoriamente neste formato textual exato em português (NÃO coloqu
       {
         role: 'system',
         content:
-          'Você é um especialista em geomorfologia comparada planetária da NASA/ESA atuando como copiloto visual. Responda em português claro, rigoroso e no formato de tags solicitado sem usar parênteses em volta dos valores.',
+          `Você é um especialista em geomorfologia comparada planetária da NASA/ESA atuando como copiloto visual. Responda em ${req.body.lang === 'en' ? 'English' : 'Portuguese'} no formato de tags solicitado sem usar parênteses em volta dos valores.`,
       },
       { role: 'user', content: promptText },
     ]);
@@ -366,7 +366,7 @@ app.post('/api/ai/diagnostics', aiRateLimit, async (req, res) => {
       actionPrompts[action] ||
       `Realize um diagnóstico analítico da amostra ${sample?.name || 'geológica'} (${targetPlanet || 'Mars'}, coordenadas ${JSON.stringify(coordinates || [])}).`;
 
-    const systemInstruction = `Você é o copiloto técnico da plataforma African Analogs. Forneça diagnósticos claros, objetivos e úteis em português.
+    const systemInstruction = `Você é o copiloto técnico da plataforma African Analogs. Forneça diagnósticos claros, objetivos e úteis em ${req.body.lang === 'en' ? 'English' : 'Portuguese'}.
 Estruture a resposta com:
 1. Resumo Direto (2 linhas)
 2. Avaliação dos Dados Manuais
@@ -406,7 +406,7 @@ Notas do Autor: ${sample?.fieldNotes || ''}
 ${visionData ? `Observações Visuais de Apoio: ${JSON.stringify(visionData)}` : ''}
 ${attachedDiagnostics ? `Análises Anteriores do Copiloto: ${attachedDiagnostics}` : ''}
 
-Estrutura clara em português:
+Use a seguinte estrutura, traduzindo os títulos e o conteúdo para ${req.body.lang === 'en' ? 'English' : 'Portuguese'}:
 # RESUMO DA PESQUISA — AFRICAN ANALOGS
 ## 1. VISÃO GERAL E LOCAL ESTUDADO
 ## 2. INTERPRETAÇÃO DO SOLO, MINERAIS E UMIDADE

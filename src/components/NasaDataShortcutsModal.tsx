@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   buildNasaImagesSearchUrl,
@@ -5,6 +6,7 @@ import {
   buildNasaWorldviewUrl,
   downloadNasaCsvTemplate,
   NASA_DATA_SHORTCUTS,
+  localizeNasaShortcut,
   NasaShortcutCategory,
 } from '../services/officialApis';
 import { AnalogueSite, PlanetaryTarget } from '../types';
@@ -43,6 +45,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
   onClose,
   onActivateNasaEventsOnMap,
 }) => {
+  const { t, lang } = useI18n();
   const [category, setCategory] = useState<NasaShortcutFilter>(initialCategory);
   const [query, setQuery] = useState('');
 
@@ -66,7 +69,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
 
   const filteredShortcuts = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return NASA_DATA_SHORTCUTS.filter((item) => {
+    return NASA_DATA_SHORTCUTS.map((source) => localizeNasaShortcut(source, lang)).filter((item) => {
       const catOk = category === 'all' || item.category === category;
       if (!catOk) return false;
       if (!q) return true;
@@ -78,7 +81,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
         item.howToUseHere.toLowerCase().includes(q)
       );
     });
-  }, [category, query]);
+  }, [category, query, lang]);
 
   if (!isOpen) return null;
 
@@ -90,9 +93,9 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
   const planetLabel = getCelestialBodyFullLabel(targetPlanet);
 
   const filterButtons: { id: NasaShortcutFilter; label: string }[] = [
-    { id: 'all', label: 'Todos os Portais' },
+    { id: 'all', label: t("Todos os Portais", "All Portals") },
     { id: 'datasets', label: 'Planilhas & Minerais' },
-    { id: 'imagery', label: 'Fotos & Satélite (GeoTIFF)' },
+    { id: 'imagery', label: t("Fotos & Satélite (GeoTIFF)", "Photos and Satellite Imagery (GeoTIFF)") },
     { id: 'missions', label: 'Marte, Lua & Sondas' },
   ];
 
@@ -113,22 +116,22 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-[#1E3A8A] dark:text-[#60A5FA]">
               <Satellite className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
-              <span>Fontes Públicas Oficiais</span>
+              <span>{t("Fontes Públicas Oficiais", "Official Public Sources")}</span>
             </div>
             <h2
               id="nasa-shortcuts-title"
               className="font-poppins text-lg sm:text-xl font-bold text-[#0F172A] dark:text-[#F0F6FC]"
             >
-              Onde Encontrar Dados da NASA
+              {t("Onde Encontrar Dados da NASA", "Where to Find NASA Data")}
             </h2>
             <p className="text-xs sm:text-sm text-[#475569] dark:text-[#94A3B8] leading-relaxed">
-              Sem arquivo, planilha ou foto própria no momento? Use estes atalhos gratuitos da NASA para baixar dados reais ou consultar a região atual.
+              {t("Sem arquivo, planilha ou foto própria no momento? Use estes atalhos gratuitos da NASA para baixar dados reais ou consultar a região atual.", "Use these free NASA resources to download data or explore the current region.")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fechar atalhos da NASA"
+            aria-label={t("Fechar atalhos da NASA", "Close NASA shortcuts")}
             className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl bg-[#FFFFFF] dark:bg-[#161B22] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F0F6FC] shadow-xs cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
@@ -156,7 +159,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
                 className="min-h-[36px] py-1.5 px-3 bg-[#FFFFFF] dark:bg-[#161B22] hover:bg-[#E2E8F0] dark:hover:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] text-xs font-medium rounded-xl inline-flex items-center gap-1.5 shadow-xs transition-colors"
               >
                 <Globe2 className="w-3.5 h-3.5 text-[#1E3A8A] dark:text-[#60A5FA]" strokeWidth={1.75} aria-hidden="true" />
-                <span>Ver esta região no NASA Worldview</span>
+                <span>{t("Ver esta região no NASA Worldview", "View this region in NASA Worldview")}</span>
                 <ExternalLink className="w-3 h-3 opacity-70" aria-hidden="true" />
               </a>
 
@@ -191,7 +194,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
                 className="min-h-[36px] py-1.5 px-3 bg-[#D97706] hover:bg-[#B45309] text-[#FFFFFF] text-xs font-medium rounded-xl inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Flame className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Ver Eventos NASA no Mapa</span>
+                <span>{t("Ver Eventos NASA no Mapa", "View NASA Events on the Map")}</span>
               </button>
 
               <button
@@ -200,14 +203,14 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
                 className="min-h-[36px] py-1.5 px-3 bg-[#1E3A8A] dark:bg-[#2563EB] hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] text-[#FFFFFF] text-xs font-medium rounded-xl inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Download className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-                <span>Baixar Modelo CSV</span>
+                <span>{t("Baixar Modelo CSV", "Download CSV Template")}</span>
               </button>
             </div>
           </div>
 
           {/* Filter & Search Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtrar fontes da NASA">
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t("Filtrar fontes da NASA", "Filter NASA sources")}>
               {filterButtons.map((btn) => {
                 const active = category === btn.id;
                 return (
@@ -235,8 +238,8 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                aria-label="Filtrar portais da NASA"
-                placeholder="Ex.: GeoTIFF, rover, CSV..."
+                aria-label={t("Filtrar portais da NASA", "Filter NASA portals")}
+                placeholder={t("Ex.: GeoTIFF, rover, CSV...", "E.g. GeoTIFF, rover, CSV...")}
                 className="w-full bg-[#F1F5F9] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] placeholder:text-[#94A3B8] text-xs pl-8 pr-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]"
               />
             </div>
@@ -274,7 +277,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
                     </p>
 
                     <div className="text-[11px] text-[#0F766E] dark:text-[#2DD4BF] bg-[#FFFFFF] dark:bg-[#161B22] px-2.5 py-2 rounded-lg">
-                      <strong>Como usar aqui:</strong> {source.howToUseHere}
+                      <strong>{t("Como usar aqui:", "How to use this here:")}</strong> {source.howToUseHere}
                     </div>
                   </div>
 
@@ -285,7 +288,7 @@ export const NasaDataShortcutsModal: React.FC<NasaDataShortcutsModalProps> = ({
                       rel="noopener noreferrer"
                       className="min-h-[36px] py-1.5 px-3.5 bg-[#FFFFFF] dark:bg-[#161B22] hover:bg-[#1E3A8A] dark:hover:bg-[#2563EB] text-[#1E3A8A] dark:text-[#60A5FA] hover:text-[#FFFFFF] dark:hover:text-[#FFFFFF] text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 shadow-xs transition-colors"
                     >
-                      <span>Abrir Portal NASA</span>
+                      <span>{t("Abrir Portal NASA", "Open NASA Portal")}</span>
                       <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
                     </a>
                   </div>
