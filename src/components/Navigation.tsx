@@ -73,7 +73,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   return (
     <header className="sticky top-0 z-50 bg-[#FFFFFF] dark:bg-[#161B22] shadow-[0_1px_0_0_rgba(15,23,42,0.06)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.06)] transition-colors duration-150">
-      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 h-16 flex items-center justify-between gap-3 sm:gap-6">
+      <div className="w-full max-w-[1680px] mx-auto px-3 sm:px-5 lg:px-6 h-16 flex items-center justify-between gap-2 sm:gap-6">
         {/* Zone 1: Mobile Hamburger Button + Brand Wordmark */}
         <div className="flex items-center gap-2 shrink-0">
           <button
@@ -94,7 +94,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <button
             type="button"
             onClick={() => handleSelectTab('research_workspace')}
-            className="font-poppins text-base sm:text-lg font-bold tracking-tight text-[#0F172A] dark:text-[#F0F6FC] hover:text-[#1E3A8A] dark:hover:text-[#60A5FA] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] rounded-md px-1"
+            className="font-poppins text-base sm:text-lg font-bold tracking-tight text-[#0F172A] dark:text-[#F0F6FC] hover:text-[#1E3A8A] dark:hover:text-[#60A5FA] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] rounded-md px-0.5 sm:px-1"
           >
             African Analogs
           </button>
@@ -126,7 +126,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         </nav>
 
         {/* Zone 3: Language + Theme Switcher + Primary Action */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <div
             role="group"
             aria-label={t('Idioma', 'Language')}
@@ -141,7 +141,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 aria-label={code === 'pt' ? 'Português' : 'English'}
                 title={code === 'pt' ? 'Português' : 'English'}
                 onClick={() => setLang(code)}
-                className={`min-h-[40px] sm:min-h-[36px] min-w-[36px] px-2 rounded text-xs font-semibold uppercase transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] ${
+                className={`min-h-[40px] sm:min-h-[36px] min-w-[30px] sm:min-w-[36px] px-1.5 sm:px-2 rounded text-xs font-semibold uppercase transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] ${
                   lang === code
                     ? 'bg-[#FFFFFF] dark:bg-[#0D1117] text-[#1E3A8A] dark:text-[#60A5FA] shadow-xs'
                     : 'text-[#64748B] dark:text-[#8B949E] hover:text-[#0F172A] dark:hover:text-[#F0F6FC]'
