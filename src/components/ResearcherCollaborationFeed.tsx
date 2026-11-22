@@ -16,6 +16,8 @@ import {
   getCelestialBodyLabel,
   PLANET_BODIES,
   SATELLITE_BODIES,
+  bodyName,
+  bodyFullName,
 } from '../data/celestialBodies';
 import { endorseBlockReason, REQUIRED_ENDORSEMENTS, validEndorserIds } from '../services/peerReview';
 import {
@@ -768,21 +770,21 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                         <optgroup label="Planetas do Sistema Solar">
                           {PLANET_BODIES.map((b) => (
                             <option key={b.id} value={b.id}>
-                              {b.namePt}
+                              {bodyName(b)}
                             </option>
                           ))}
                         </optgroup>
                         <optgroup label="Planetas Anões">
                           {DWARF_PLANET_BODIES.map((b) => (
                             <option key={b.id} value={b.id}>
-                              {b.namePt}
+                              {bodyName(b)}
                             </option>
                           ))}
                         </optgroup>
                         <optgroup label="Satélites Naturais (Luas)">
                           {SATELLITE_BODIES.map((b) => (
                             <option key={b.id} value={b.id}>
-                              {b.namePt} ({b.hostBodyPt})
+                              {bodyFullName(b)}
                             </option>
                           ))}
                         </optgroup>
@@ -973,7 +975,8 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                   <div className="pt-4 border-t border-[#E2E8F0] dark:border-[#30363D]">
                     <ContributionGraph
                       events={activeContributions}
-                      ownerLabel={currentUser && currentUser.id === activeCollaborator.id ? 'você' : activeCollaborator.name}
+                      ownerLabel={activeCollaborator.name}
+                      isSelf={Boolean(currentUser && currentUser.id === activeCollaborator.id)}
                     />
                   </div>
 
@@ -1082,21 +1085,21 @@ export const ResearcherCollaborationFeed: React.FC<ResearcherCollaborationFeedPr
                       <optgroup label="Planetas do Sistema Solar">
                         {PLANET_BODIES.map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.namePt}
+                            {bodyName(b)}
                           </option>
                         ))}
                       </optgroup>
                       <optgroup label="Planetas Anões">
                         {DWARF_PLANET_BODIES.map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.namePt}
+                            {bodyName(b)}
                           </option>
                         ))}
                       </optgroup>
                       <optgroup label="Satélites Naturais (Luas)">
                         {SATELLITE_BODIES.map((b) => (
                           <option key={b.id} value={b.id}>
-                            {b.namePt} ({b.hostBodyPt})
+                            {bodyFullName(b)}
                           </option>
                         ))}
                       </optgroup>

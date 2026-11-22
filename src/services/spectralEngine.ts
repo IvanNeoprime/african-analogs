@@ -1,5 +1,5 @@
 import { GeologicalSample, PlanetaryTarget, SpectralPoint } from '../types';
-import { CELESTIAL_BODIES } from '../data/celestialBodies';
+import { CELESTIAL_BODIES, bodyNames } from '../data/celestialBodies';
 
 export interface MultispectralBands {
   blue: number;      // ~480nm (Band 2 Landsat 8/Sentinel-2)
@@ -328,7 +328,7 @@ function resolveCsvTargetPlanet(raw?: string): PlanetaryTarget | undefined {
   if (!raw) return undefined;
   const normalized = raw.trim().toLowerCase();
   const matched = CELESTIAL_BODIES.find(
-    (b) => b.id.toLowerCase() === normalized || b.namePt.toLowerCase() === normalized
+    (b) => bodyNames(b).some((n) => n.toLowerCase() === normalized)
   );
   return matched ? matched.id : undefined;
 }

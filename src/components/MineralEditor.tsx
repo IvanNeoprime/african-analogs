@@ -1,5 +1,6 @@
 import React, { useId } from 'react';
 import { Plus, X } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 export interface MineralRow {
   id: string;
@@ -41,6 +42,7 @@ interface MineralEditorProps {
 
 export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, suggestions = [] }) => {
   const listId = useId();
+  const { t } = useI18n();
   const options = [...new Set([...COMMON_MINERALS, ...suggestions])].sort((a, b) => a.localeCompare(b, 'pt'));
 
   const total = rows.reduce((sum, r) => {
@@ -55,7 +57,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
 
   return (
     <fieldset className="space-y-2 min-w-0">
-      <legend className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">Minerais observados (% em massa)</legend>
+      <legend className="text-xs font-medium text-[#475569] dark:text-[#94A3B8] mb-1">{t('Minerais observados (% em massa)', 'Observed minerals (% by mass)')}</legend>
       <datalist id={listId}>
         {options.map((o) => (
           <option key={o} value={o} />
@@ -64,7 +66,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
 
       {rows.length === 0 && (
         <p className="text-xs text-[#64748B] dark:text-[#8B949E] p-2.5 rounded-xl bg-[#FFFFFF] dark:bg-[#161B22]">
-          Ainda sem minerais. Sem minerais a semelhança não pode ser calculada.
+          {t('Ainda sem minerais. Sem minerais a semelhança não pode ser calculada.', 'No minerals yet. Without minerals the similarity cannot be calculated.')}
         </p>
       )}
 
@@ -76,7 +78,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
               list={listId}
               value={r.name}
               onChange={(e) => update(r.id, { name: e.target.value })}
-              placeholder="Mineral (ex.: Hematita)"
+              placeholder={t('Mineral (ex.: Hematita)', 'Mineral (e.g. Hematite)')}
               aria-label={`Mineral ${i + 1}`}
               className="flex-1 min-w-0 bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] text-sm px-3 py-2 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
             />
@@ -90,7 +92,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
                 value={r.pct}
                 onChange={(e) => update(r.id, { pct: e.target.value })}
                 placeholder="%"
-                aria-label={`Percentagem de ${r.name || `mineral ${i + 1}`}`}
+                aria-label={t(`Percentagem de ${r.name || `mineral ${i + 1}`}`, `Percentage of ${r.name || `mineral ${i + 1}`}`)}
                 className="w-full bg-[#FFFFFF] dark:bg-[#161B22] text-[#0F172A] dark:text-[#F0F6FC] font-mono text-sm pl-3 pr-7 py-2 rounded-xl tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A]"
               />
               <span aria-hidden="true" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#64748B]">%</span>
@@ -98,7 +100,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
             <button
               type="button"
               onClick={() => onChange(rows.filter((x) => x.id !== r.id))}
-              aria-label={`Remover ${r.name || `mineral ${i + 1}`}`}
+              aria-label={t(`Remover ${r.name || `mineral ${i + 1}`}`, `Remove ${r.name || `mineral ${i + 1}`}`)}
               className="w-9 h-9 shrink-0 flex items-center justify-center rounded-xl text-[#64748B] hover:text-[#B91C1C] hover:bg-[#FFFFFF] dark:hover:bg-[#161B22] cursor-pointer"
             >
               <X className="w-4 h-4" strokeWidth={1.75} />
@@ -114,7 +116,7 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
           className="py-1.5 px-3 rounded-lg bg-[#FFFFFF] dark:bg-[#161B22] text-[#1E3A8A] dark:text-[#60A5FA] text-xs font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
-          Adicionar mineral
+          {t('Adicionar mineral', 'Add mineral')}
         </button>
         {rows.length > 0 && (
           <span
@@ -124,13 +126,17 @@ export const MineralEditor: React.FC<MineralEditorProps> = ({ rows, onChange, su
             }`}
           >
             Total: {totalRounded}%
-            {!totalOk && (total < 100 ? ` · faltam ${Math.round((100 - total) * 10) / 10}%` : ' · passa de 100%')}
+            {!totalOk &&
+              (total < 100
+                ? t(` · faltam ${Math.round((100 - total) * 10) / 10}%`, ` · ${Math.round((100 - total) * 10) / 10}% missing`)
+                : t(' · passa de 100%', ' · over 100%'))}
           </span>
         )}
       </div>
       {incomplete > 0 && (
         <p className="text-xs text-[#B45309] dark:text-[#FBBF24]">
-          {incomplete === 1 ? '1 linha incompleta' : `${incomplete} linhas incompletas`} (falta o nome ou a percentagem) — não entra no cálculo.
+          {incomplete === 1 ? t('1 linha incompleta', '1 incomplete row') : t(`${incomplete} linhas incompletas`, `${incomplete} incomplete rows`)}{' '}
+          {t('(falta o nome ou a percentagem) — não entra no cálculo.', '(name or percentage missing) — left out of the calculation.')}
         </p>
       )}
     </fieldset>

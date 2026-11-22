@@ -13,12 +13,15 @@ import type {
 
 export type ContributionKind = 'study' | 'review' | 'endorsement' | 'discussion' | 'group';
 
-export const CONTRIBUTION_KINDS: Record<ContributionKind, { label: string; plural: string; points: number }> = {
-  study: { label: 'Estudo publicado', plural: 'Estudos publicados', points: 10 },
-  review: { label: 'Revisão / comentário', plural: 'Revisões e comentários', points: 3 },
-  endorsement: { label: 'Endosso de estudo', plural: 'Endossos', points: 2 },
-  discussion: { label: 'Mensagem em estudo', plural: 'Mensagens em estudos', points: 1 },
-  group: { label: 'Grupo criado', plural: 'Grupos criados', points: 5 },
+export const CONTRIBUTION_KINDS: Record<
+  ContributionKind,
+  { label: string; plural: string; labelEn: string; pluralEn: string; points: number }
+> = {
+  study: { label: 'Estudo publicado', plural: 'Estudos publicados', labelEn: 'Published study', pluralEn: 'Published studies', points: 10 },
+  review: { label: 'Revisão / comentário', plural: 'Revisões e comentários', labelEn: 'Review / comment', pluralEn: 'Reviews and comments', points: 3 },
+  endorsement: { label: 'Endosso de estudo', plural: 'Endossos', labelEn: 'Study endorsement', pluralEn: 'Endorsements', points: 2 },
+  discussion: { label: 'Mensagem em estudo', plural: 'Mensagens em estudos', labelEn: 'Message on a study', pluralEn: 'Messages on studies', points: 1 },
+  group: { label: 'Grupo criado', plural: 'Grupos criados', labelEn: 'Group created', pluralEn: 'Groups created', points: 5 },
 };
 
 export interface ContributionEvent {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Check, CloudUpload, HardDrive, Link2, Loader2 } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 export interface SaveState {
   sampleId: string;
@@ -14,18 +15,19 @@ export interface SaveState {
 function useNow(intervalMs = 30_000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
   }, [intervalMs]);
   return now;
 }
 
-function relativeTime(iso: string, now: number): string {
+function relativeTime(iso: string, now: number, t: (pt: string, en: string) => string, locale: string): string {
   const seconds = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
-  if (seconds < 45) return 'agora mesmo';
+  if (seconds < 45) return t('agora mesmo', 'just now');
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `há ${minutes} min`;
-  return `às ${new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}`;
+  if (minutes < 60) return t(`há ${minutes} min`, `${minutes} min ago`);
+  const clock = new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  return t(`às ${clock}`, `at ${clock}`);
 }
 
 /** Tells the person where their data went, right under the save button. */
@@ -35,42 +37,43 @@ export const SaveIndicator: React.FC<{ saveState?: SaveState | null; sampleId: s
   isSignedIn,
 }) => {
   const now = useNow();
+  const { t, locale } = useI18n();
   if (!saveState || saveState.sampleId !== sampleId) {
     return (
       <p className="text-xs text-[#64748B] dark:text-[#8B949E]">
         {isSignedIn
-          ? 'Ao guardar, o estudo é publicado na comunidade com o seu nome.'
-          : 'Sem conta, os dados ficam só neste navegador. Entre para os publicar.'}
+          ? t('Ao guardar, o estudo é publicado na comunidade com o seu nome.', 'When you save, the study is published to the community under your name.')
+          : t('Sem conta, os dados ficam só neste navegador. Entre para os publicar.', 'Without an account, data stays in this browser only. Sign in to publish it.')}
       </p>
     );
   }
-  const when = relativeTime(saveState.at, now);
+  const when = relativeTime(saveState.at, now, t, locale);
   const base = 'text-xs flex items-center gap-1.5';
   switch (saveState.remote) {
     case 'pending':
       return (
         <p role="status" className={`${base} text-[#475569] dark:text-[#94A3B8]`}>
-          <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2} aria-hidden="true" /> A publicar na comunidade…
+          <Loader2 className="w-3.5 h-3.5 animate-spin" strokeWidth={2} aria-hidden="true" /> {t('A publicar na comunidade…', 'Publishing to the community…')}
         </p>
       );
     case 'ok':
       return (
         <p role="status" className={`${base} text-[#15803D] dark:text-[#4ADE80]`}>
-          <CloudUpload className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" /> Publicado na comunidade {when}
+          <CloudUpload className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" /> {t('Publicado na comunidade', 'Published to the community')} {when}
         </p>
       );
     case 'error':
       return (
         <p role="alert" className={`${base} text-[#B91C1C] dark:text-[#F87171]`}>
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
-          Guardado neste navegador {when}, mas não foi publicado: {saveState.message || 'erro no servidor'}.
+          {t('Guardado neste navegador', 'Saved in this browser')} {when}, {t('mas não foi publicado', 'but not published')}: {saveState.message || t('erro no servidor', 'server error')}.
         </p>
       );
     default:
       return (
         <p role="status" className={`${base} text-[#475569] dark:text-[#94A3B8]`}>
-          <HardDrive className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" /> Guardado neste navegador {when}. Entre na sua
-          conta para publicar.
+          <HardDrive className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" /> {t('Guardado neste navegador', 'Saved in this browser')} {when}.{' '}
+          {t('Entre na sua conta para publicar.', 'Sign in to publish.')}
         </p>
       );
   }
@@ -105,28 +108,37 @@ export const ResearchSteps: React.FC<ResearchStepsProps> = ({
   studyLink,
 }) => {
   const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
   const savedThis = Boolean(saveState && saveState.sampleId === sampleId);
   const published = savedThis && saveState!.remote === 'ok';
 
   const steps = [
     {
       n: 1,
-      title: 'Amostra',
-      hint: isExample ? 'Comece do zero ou edite o exemplo' : hasMinerals ? 'Dados preenchidos' : 'Indique minerais, aw e pH',
+      title: t('Amostra', 'Sample'),
+      hint: isExample
+        ? t('Comece do zero ou edite o exemplo', 'Start from scratch or edit the example')
+        : hasMinerals
+        ? t('Dados preenchidos', 'Data filled in')
+        : t('Indique minerais, aw e pH', 'Enter minerals, aw and pH'),
       done: savedThis && hasMinerals,
       onClick: onGoToSample,
     },
     {
       n: 2,
-      title: 'Resultado',
-      hint: savedThis ? 'Veja a semelhança e os gráficos' : 'Aparece depois de guardar',
+      title: t('Resultado', 'Result'),
+      hint: savedThis ? t('Veja a semelhança e os gráficos', 'See the similarity and the charts') : t('Aparece depois de guardar', 'Appears after saving'),
       done: savedThis,
       onClick: onGoToResult,
     },
     {
       n: 3,
-      title: 'Partilhar',
-      hint: published ? 'Publicado na comunidade' : isSignedIn ? 'Guarde para publicar' : 'Entre na conta para publicar',
+      title: t('Partilhar', 'Share'),
+      hint: published
+        ? t('Publicado na comunidade', 'Published to the community')
+        : isSignedIn
+        ? t('Guarde para publicar', 'Save to publish')
+        : t('Entre na conta para publicar', 'Sign in to publish'),
       done: published,
       onClick: onGoToShare,
     },
@@ -134,7 +146,7 @@ export const ResearchSteps: React.FC<ResearchStepsProps> = ({
   const current = steps.find((s) => !s.done)?.n ?? 3;
 
   return (
-    <nav aria-label="Passos da análise" className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-3 sm:p-4 shadow-xs">
+    <nav aria-label={t('Passos da análise', 'Analysis steps')} className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-3 sm:p-4 shadow-xs">
       <ol className="grid grid-cols-3 gap-2">
         {steps.map((s) => {
           const isCurrent = s.n === current && !s.done;
@@ -163,7 +175,7 @@ export const ResearchSteps: React.FC<ResearchStepsProps> = ({
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-[#0F172A] dark:text-[#F0F6FC]">
                     {s.title}
-                    <span className="sr-only">{s.done ? ' (concluído)' : isCurrent ? ' (passo atual)' : ''}</span>
+                    <span className="sr-only">{s.done ? t(' (concluído)', ' (done)') : isCurrent ? t(' (passo atual)', ' (current step)') : ''}</span>
                   </span>
                   <span className="hidden sm:block text-xs text-[#475569] dark:text-[#94A3B8] truncate">{s.hint}</span>
                 </span>
@@ -174,7 +186,7 @@ export const ResearchSteps: React.FC<ResearchStepsProps> = ({
       </ol>
       {studyLink && (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-xs">
-          <span className="text-[#15803D] dark:text-[#4ADE80]">Estudo publicado.</span>
+          <span className="text-[#15803D] dark:text-[#4ADE80]">{t('Estudo publicado.', 'Study published.')}</span>
           <button
             type="button"
             onClick={() => {
@@ -185,7 +197,7 @@ export const ResearchSteps: React.FC<ResearchStepsProps> = ({
             className="py-1.5 px-3 rounded-lg bg-[#F1F5F9] dark:bg-[#21262D] text-[#0F172A] dark:text-[#F0F6FC] font-medium flex items-center gap-1.5 cursor-pointer"
           >
             {copied ? <Check className="w-3.5 h-3.5" strokeWidth={2} /> : <Link2 className="w-3.5 h-3.5" strokeWidth={2} />}
-            <span aria-live="polite">{copied ? 'Link copiado' : 'Copiar link para partilhar'}</span>
+            <span aria-live="polite">{copied ? t('Link copiado', 'Link copied') : t('Copiar link para partilhar', 'Copy link to share')}</span>
           </button>
         </div>
       )}

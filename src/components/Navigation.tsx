@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Compass, Users, Plus, Sun, Moon, Menu, X, UserCircle2 } from 'lucide-react';
 import { CollaboratorProfile } from '../types';
+import { useI18n, Lang } from '../i18n';
 
 export type CleanMenuTab = 'research_workspace' | 'peer_network' | 'account_profile';
 
@@ -24,23 +25,24 @@ export const Navigation: React.FC<NavigationProps> = ({
   onToggleTheme,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { t, lang, setLang } = useI18n();
 
   const displayFirstName = currentUser ? currentUser.name.split(' ')[0] : null;
 
   const tabs: { id: CleanMenuTab; label: string; icon: React.ReactNode }[] = [
     {
       id: 'research_workspace',
-      label: 'Pesquisa',
+      label: t('Pesquisa', 'Research'),
       icon: <Compass className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />,
     },
     {
       id: 'peer_network',
-      label: 'Comunidade',
+      label: t('Comunidade', 'Community'),
       icon: <Users className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />,
     },
     {
       id: 'account_profile',
-      label: displayFirstName ? `Conta · ${displayFirstName}` : 'Entrar',
+      label: displayFirstName ? `${t('Conta', 'Account')} · ${displayFirstName}` : t('Entrar', 'Sign in'),
       icon: currentUser ? (
         <img
           src={currentUser.avatarUrl}
@@ -79,7 +81,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-nav-drawer"
-            aria-label={mobileMenuOpen ? 'Fechar menu de navegação' : 'Abrir menu de navegação'}
+            aria-label={mobileMenuOpen ? t('Fechar menu de navegação', 'Close navigation menu') : t('Abrir menu de navegação', 'Open navigation menu')}
             className="hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-[#0F172A] dark:text-[#F0F6FC] hover:bg-[#F1F5F9] dark:hover:bg-[#21262D] transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
           >
             {mobileMenuOpen ? (
@@ -99,7 +101,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
 
         {/* Zone 2: Desktop Clean Underline Navigation */}
-        <nav aria-label="Navegação principal" className="hidden md:flex items-center gap-6 h-full">
+        <nav aria-label={t('Navegação principal', 'Main navigation')} className="hidden md:flex items-center gap-6 h-full">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -123,25 +125,50 @@ export const Navigation: React.FC<NavigationProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Theme Switcher + Account Quick Pill + Primary Action */}
+        {/* Zone 3: Language + Theme Switcher + Primary Action */}
         <div className="flex items-center gap-2 shrink-0">
+          <div
+            role="group"
+            aria-label={t('Idioma', 'Language')}
+            className="flex items-center p-0.5 rounded-md bg-[#F1F5F9] dark:bg-[#21262D] shrink-0"
+          >
+            {(['pt', 'en'] as Lang[]).map((code) => (
+              <button
+                key={code}
+                type="button"
+                lang={code}
+                aria-pressed={lang === code}
+                aria-label={code === 'pt' ? 'Português' : 'English'}
+                title={code === 'pt' ? 'Português' : 'English'}
+                onClick={() => setLang(code)}
+                className={`min-h-[40px] sm:min-h-[36px] min-w-[36px] px-2 rounded text-xs font-semibold uppercase transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] ${
+                  lang === code
+                    ? 'bg-[#FFFFFF] dark:bg-[#0D1117] text-[#1E3A8A] dark:text-[#60A5FA] shadow-xs'
+                    : 'text-[#64748B] dark:text-[#8B949E] hover:text-[#0F172A] dark:hover:text-[#F0F6FC]'
+                }`}
+              >
+                {code}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             onClick={onToggleTheme}
             aria-pressed={theme === 'dark'}
-            aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
-            title={theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+            aria-label={theme === 'dark' ? t('Ativar modo claro', 'Switch to light mode') : t('Ativar modo escuro', 'Switch to dark mode')}
+            title={theme === 'dark' ? t('Mudar para modo claro', 'Switch to light mode') : t('Mudar para modo escuro', 'Switch to dark mode')}
             className="min-h-[44px] min-w-[44px] sm:min-h-[40px] sm:min-w-0 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-[#0F172A] dark:text-[#F0F6FC] bg-[#F1F5F9] dark:bg-[#21262D] hover:bg-[#E2E8F0] dark:hover:bg-[#30363D] rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA]"
           >
             {theme === 'dark' ? (
               <>
                 <Sun className="w-4 h-4 text-[#FBBF24]" strokeWidth={1.75} aria-hidden="true" />
-                <span className="hidden sm:inline">Claro</span>
+                <span className="hidden sm:inline">{t('Claro', 'Light')}</span>
               </>
             ) : (
               <>
                 <Moon className="w-4 h-4 text-[#1E3A8A]" strokeWidth={1.75} aria-hidden="true" />
-                <span className="hidden sm:inline">Escuro</span>
+                <span className="hidden sm:inline">{t('Escuro', 'Dark')}</span>
               </>
             )}
           </button>
@@ -152,18 +179,18 @@ export const Navigation: React.FC<NavigationProps> = ({
               onNewAnalysis();
               setMobileMenuOpen(false);
             }}
-            aria-label="Nova análise"
+            aria-label={t('Nova análise', 'New analysis')}
             className="min-h-[44px] min-w-[44px] sm:min-h-[40px] flex items-center justify-center gap-1.5 py-2 px-3 sm:px-4 text-sm font-medium text-[#FFFFFF] bg-[#1E3A8A] dark:bg-[#2563EB] rounded-md hover:bg-[#1E40AF] dark:hover:bg-[#1D4ED8] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1E3A8A] dark:focus-visible:ring-[#60A5FA] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#161B22]"
           >
             <Plus className="w-5 h-5 sm:w-4 sm:h-4" strokeWidth={2} aria-hidden="true" />
-            <span className="hidden sm:inline">Nova Análise</span>
+            <span className="hidden sm:inline">{t('Nova Análise', 'New Analysis')}</span>
           </button>
         </div>
       </div>
 
       {/* Phones: bottom tab bar */}
       <nav
-        aria-label="Navegação principal"
+        aria-label={t('Navegação principal', 'Main navigation')}
         className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#FFFFFF] dark:bg-[#161B22] shadow-[0_-1px_0_0_rgba(15,23,42,0.08)] dark:shadow-[0_-1px_0_0_rgba(255,255,255,0.08)] pb-[env(safe-area-inset-bottom)]"
       >
         <ul className="grid grid-cols-3">
@@ -194,7 +221,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       {mobileMenuOpen && (
         <nav
           id="mobile-nav-drawer"
-          aria-label="Menu de navegação móvel"
+          aria-label={t('Menu de navegação móvel', 'Mobile navigation menu')}
           className="md:hidden bg-[#FFFFFF] dark:bg-[#161B22] px-4 py-3 space-y-1 shadow-md"
         >
           {tabs.map((tab) => {

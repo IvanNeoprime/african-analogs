@@ -9,11 +9,14 @@ const AccountEcosystemView = lazy(() =>
   import('./components/AccountEcosystemView').then((m) => ({ default: m.AccountEcosystemView }))
 );
 
-const TabFallback = () => (
-  <div role="status" className="py-16 text-center text-sm text-[#475569] dark:text-[#94A3B8]">
-    A carregar…
-  </div>
-);
+const TabFallback = () => {
+  const { t } = useI18n();
+  return (
+    <div role="status" className="py-16 text-center text-sm text-[#475569] dark:text-[#94A3B8]">
+      {t('A carregar…', 'Loading…')}
+    </div>
+  );
+};
 
 import {
   ANALOGUE_SITES,
@@ -39,6 +42,7 @@ import { computeSampleFingerprint } from './services/fingerprint';
 import { endorseBlockReason, reviewStatus } from './services/peerReview';
 import { api, ApiError, mergeById } from './services/api';
 import type { SaveState } from './components/ResearchSteps';
+import { useI18n, tr } from './i18n';
 
 /** Merges two message maps (per study), de-duplicating by message id and keeping time order. */
 function mergeThreads(
@@ -113,6 +117,7 @@ function routeToHash(route: Route): string {
 }
 
 export default function App() {
+  const { t, locale } = useI18n();
   const initialRoute = useMemo(() => parseRoute(window.location.hash), []);
   const initialLocal = useMemo(() => {
     const state = loadLocalWorkspaceState();
@@ -220,8 +225,8 @@ export default function App() {
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   useEffect(() => {
     if (!syncNotice) return;
-    const t = setTimeout(() => setSyncNotice(null), 6000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setSyncNotice(null), 6000);
+    return () => clearTimeout(timer);
   }, [syncNotice]);
 
   /** Runs a server write when signed in; failures are shown, local changes are kept. */
@@ -245,7 +250,7 @@ export default function App() {
         setStudyThreads((prev) => mergeThreads(prev, remote.studyThreads));
         setNetworkGroups((prev) => mergeById(prev, remote.networkGroups));
       })
-      .catch(() => setSyncNotice('Servidor indisponível: a mostrar só os dados guardados neste navegador.'));
+      .catch(() => setSyncNotice(tr('Servidor indisponível: a mostrar só os dados guardados neste navegador.', 'Server unavailable: showing only the data saved in this browser.')));
     return () => {
       mounted = false;
     };
@@ -291,7 +296,7 @@ export default function App() {
     setAccounts((prev) => [account, ...prev.filter((a) => a.id !== account.id)]);
     setCustomProfiles((prev) => [profile, ...prev.filter((p) => p.id !== profile.id)]);
     setSessionUserId(profile.id);
-    syncRemote('Perfil não publicado', () => api.saveProfile(profile));
+    syncRemote(tr('Perfil não publicado', 'Profile not published'), () => api.saveProfile(profile));
   };
 
   const handleLoginAccount = async (identifier: string, password: string) => {
@@ -329,13 +334,13 @@ export default function App() {
       const byId = new Map(renamed.map((s) => [s.id, s]));
       setSamples((prev) => prev.map((s) => byId.get(s.id) || s));
       if (profileId === sessionUserId) {
-        for (const s of renamed) syncRemote('Estudo não atualizado', () => api.saveSample(s));
+        for (const s of renamed) syncRemote(tr('Estudo não atualizado', 'Study not updated'), () => api.saveSample(s));
       }
     }
 
     if (profileId === sessionUserId) {
       const current = allCollaborators.find((c) => c.id === profileId);
-      if (current) syncRemote('Perfil não guardado no servidor', () => api.saveProfile({ ...current, ...patch }));
+      if (current) syncRemote(tr('Perfil não guardado no servidor', 'Profile not saved on the server'), () => api.saveProfile({ ...current, ...patch }));
     }
   };
 
@@ -344,7 +349,7 @@ export default function App() {
     currentPassword: string,
     newPassword: string
   ) => {
-    if (!accounts.some((a) => a.id === accountId)) throw new Error('Conta não encontrada.');
+    if (!accounts.some((a) => a.id === accountId)) throw new Error(tr('Conta não encontrada.', 'Account not found.'));
     await changePassword(currentPassword, newPassword);
     setAccounts((prev) =>
       prev.map((a) => (a.id === accountId ? { ...a, updatedAt: new Date().toISOString() } : a))
@@ -391,7 +396,7 @@ export default function App() {
 
   const handleDeleteOwnSample = (sampleId: string) => {
     setSamples((prev) => prev.filter((s) => s.id !== sampleId));
-    syncRemote('Estudo não apagado no servidor', () => api.deleteSample(sampleId));
+    syncRemote(tr('Estudo não apagado no servidor', 'Study not deleted on the server'), () => api.deleteSample(sampleId));
   };
 
   // --- Collaboration & Network Actions ---
@@ -417,13 +422,13 @@ export default function App() {
     }));
     // Only people's messages are shared; automatic AI replies stay with the person who asked.
     if (msg.sender === 'user') {
-      syncRemote('Mensagem não enviada ao servidor', () => api.addStudyMessage(sampleId, msg));
+      syncRemote(tr('Mensagem não enviada ao servidor', 'Message not sent to the server'), () => api.addStudyMessage(sampleId, msg));
     }
   };
 
   const handleCreateNetworkGroup = (group: ResearchNetworkGroup) => {
     setNetworkGroups((prev) => [group, ...prev]);
-    syncRemote('Grupo não criado no servidor', () =>
+    syncRemote(tr('Grupo não criado no servidor', 'Group not created on the server'), () =>
       api.createGroup(group).then((saved) => setNetworkGroups((prev) => prev.map((g) => (g.id === saved.id ? saved : g))))
     );
   };
@@ -442,7 +447,7 @@ export default function App() {
         };
       })
     );
-    syncRemote('Participação no grupo não guardada', () =>
+    syncRemote(tr('Participação no grupo não guardada', 'Group membership not saved'), () =>
       api
         .toggleGroupMembership(groupId)
         .then(({ group }) => setNetworkGroups((prev) => prev.map((g) => (g.id === group.id ? group : g))))
@@ -465,17 +470,17 @@ export default function App() {
       const coordinates = p.coordinates || refSite.coordinates;
       if (!p.coordinates) {
         unmeasured.add('coordinates');
-        placeholders.push(`coordenadas do sítio de referência (${refSite.name})`);
+        placeholders.push(tr(`coordenadas do sítio de referência (${refSite.name})`, `reference site coordinates (${refSite.name})`));
       }
       const waterActivity = p.waterActivity ?? refSite.waterActivityAw;
       if (p.waterActivity === undefined) {
         unmeasured.add('waterActivity');
-        placeholders.push(`aw típica do sítio (${refSite.waterActivityAw})`);
+        placeholders.push(tr(`aw típica do sítio (${refSite.waterActivityAw})`, `typical site aw (${refSite.waterActivityAw})`));
       }
       const pH = p.pH ?? 7;
       if (p.pH === undefined) {
         unmeasured.add('pH');
-        placeholders.push('pH 7 (neutro, não medido)');
+        placeholders.push(tr('pH 7 (neutro, não medido)', 'pH 7 (neutral, not measured)'));
       }
       const minerals = p.minerals || {};
       if (Object.keys(minerals).length === 0) unmeasured.add('minerals');
@@ -490,35 +495,38 @@ export default function App() {
         unmeasured: [...unmeasured],
       };
       const notesSuffix = placeholders.length
-        ? `\n[Não medido no ficheiro — valores provisórios: ${placeholders.join('; ')}.]`
+        ? tr(
+            `\n[Não medido no ficheiro — valores provisórios: ${placeholders.join('; ')}.]`,
+            `\n[Not measured in the file — provisional values: ${placeholders.join('; ')}.]`
+          )
         : '';
 
       const sample: GeologicalSample = {
         ...base,
         id: p.id || `smp-imp-${Date.now()}-${index}`,
-        name: p.name || `Amostra importada #${index + 1}`,
+        name: p.name || tr(`Amostra importada #${index + 1}`, `Imported sample #${index + 1}`),
         siteId: p.siteId && sites.some((s) => s.id === p.siteId) ? p.siteId : refSite.id,
         collaboratorId: p.collaboratorId || currentUser?.id,
-        collectorName: p.collectorName || currentUser?.name || 'Não indicado',
-        institution: p.institution || currentUser?.institution || 'Não indicada',
+        collectorName: p.collectorName || currentUser?.name || tr('Não indicado', 'Not given'),
+        institution: p.institution || currentUser?.institution || tr('Não indicada', 'Not given'),
         collectedAt: p.collectedAt || new Date().toISOString().split('T')[0],
         coordinates,
-        rockClassification: p.rockClassification || 'Não classificada',
+        rockClassification: p.rockClassification || tr('Não classificada', 'Unclassified'),
         xrfComposition: p.xrfComposition || {},
         fidelityScores: computeAnalogueFidelity(base, target, refSite),
         spectralCurve: generateSpectralReflectanceCurve(minerals),
-        fieldNotes: (p.fieldNotes || 'Importado de ficheiro CSV/JSON.') + notesSuffix,
+        fieldNotes: (p.fieldNotes || tr('Importado de ficheiro CSV/JSON.', 'Imported from a CSV/JSON file.')) + notesSuffix,
         version: p.version || 'v1.0.0-import',
         publishedAt: new Date().toISOString(),
         hash: '',
         status: 'draft',
-        officialSource: p.officialSource || 'Ficheiro importado pelo utilizador',
+        officialSource: p.officialSource || tr('Ficheiro importado pelo utilizador', 'File imported by the user'),
         peerComments: [],
       };
       return { ...sample, hash: computeSampleFingerprint(sample) };
     });
     for (const s of normalized) {
-      syncRemote('Estudo importado não publicado', () =>
+      syncRemote(tr('Estudo importado não publicado', 'Imported study not published'), () =>
         api.saveSample(s).then((saved) => setSamples((prev) => prev.map((x) => (x.id === saved.id ? saved : x))))
       );
     }
@@ -541,9 +549,9 @@ export default function App() {
     const newComment: PeerComment = {
       id: `c-${Date.now()}`,
       sampleId,
-      author: currentUser ? `${currentUser.name} (${currentUser.codename})` : 'Pesquisador Colaborador',
+      author: currentUser ? `${currentUser.name} (${currentUser.codename})` : tr('Pesquisador Colaborador', 'Collaborating researcher'),
       authorId: currentUser?.id,
-      role: currentUser?.role || 'Investigador Planetário',
+      role: currentUser?.role || tr('Investigador Planetário', 'Planetary researcher'),
       institution: currentUser?.institution || 'African Analogs Collaborative',
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16) + ' UTC',
       content: commentText,
@@ -559,7 +567,7 @@ export default function App() {
         return s;
       })
     );
-    syncRemote('Comentário não publicado no servidor', () =>
+    syncRemote(tr('Comentário não publicado no servidor', 'Comment not published on the server'), () =>
       api
         .addComment(sampleId, {
           content: commentText,
@@ -590,7 +598,7 @@ export default function App() {
       collectedAt: new Date().toISOString().slice(0, 10),
       coordinates: selectedSite.coordinates,
       depthCm: 0,
-      rockClassification: 'Não classificada',
+      rockClassification: tr('Não classificada', 'Unclassified'),
       targetPlanet: selectedSite.targetPlanet,
       waterActivity: 0,
       pH: 7,
@@ -603,7 +611,7 @@ export default function App() {
       version: 'v1.0.0-manual',
       hash: '',
       status: 'draft',
-      officialSource: 'Registo manual do pesquisador',
+      officialSource: tr('Registo manual do pesquisador', "Researcher's manual record"),
       peerComments: [],
       unmeasured: ['waterActivity', 'pH', 'depthCm', 'porosityPercent', 'minerals', 'xrfComposition'],
     };
@@ -618,7 +626,7 @@ export default function App() {
       targetPlanet: patch.targetPlanet || prev?.targetPlanet || activeSample.targetPlanet,
       ...prev,
       ...patch,
-      updatedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      updatedAt: new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
     }));
   };
 
@@ -630,7 +638,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0D1117] text-[#0F172A] dark:text-[#F0F6FC] flex flex-col font-sans transition-colors duration-150">
       <a href="#main-content" className="skip-link">
-        Pular para o conteúdo principal
+        {t('Pular para o conteúdo principal', 'Skip to main content')}
       </a>
 
       <Navigation
@@ -748,10 +756,10 @@ export default function App() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-poppins font-semibold text-[#0F172A] dark:text-[#F0F6FC]">African Analogs</span>
             <span aria-hidden="true">·</span>
-            <span>Lugares na Terra parecidos com outros planetas</span>
+            <span>{t('Lugares na Terra parecidos com outros planetas', 'Places on Earth that resemble other worlds')}</span>
           </div>
           <div>
-            Dados públicos NASA · Aberto para todos
+            {t('Dados públicos NASA · Aberto para todos', 'Public NASA data · Open to everyone')}
           </div>
         </div>
       </footer>

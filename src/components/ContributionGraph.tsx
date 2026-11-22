@@ -9,6 +9,7 @@ import {
   eventsInLastYear,
   summarize,
 } from '../services/contributions';
+import { useI18n } from '../i18n';
 
 /**
  * GitHub-style contribution calendar: one square per day for the last year, darker = more
@@ -26,25 +27,33 @@ const LEVEL_CLASSES: Record<ContributionDay['level'], string> = {
 };
 
 const KIND_ORDER: ContributionKind[] = ['study', 'review', 'endorsement', 'discussion', 'group'];
-const WEEKDAY_LABELS = ['', 'Seg', '', 'Qua', '', 'Sex', ''];
+const WEEKDAY_LABELS = { pt: ['', 'Seg', '', 'Qua', '', 'Sex', ''], en: ['', 'Mon', '', 'Wed', '', 'Fri', ''] };
 const CELL = 11;
 const GAP = 3;
 
-const longDate = (key: string) =>
-  new Date(`${key}T12:00:00`).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
-const shortMonth = (key: string) =>
-  new Date(`${key}T12:00:00`).toLocaleDateString('pt-PT', { month: 'short' }).replace('.', '');
-
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString('pt-PT')} ${n === 1 ? one : many}`;
+const longDate = (key: string, locale: string) =>
+  new Date(`${key}T12:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+const shortMonth = (key: string, locale: string) =>
+  new Date(`${key}T12:00:00`).toLocaleDateString(locale, { month: 'short' }).replace('.', '');
 
 interface ContributionGraphProps {
   events: ContributionEvent[];
-  /** Who the graph belongs to, for accessible labels ("de Ana", "suas"). */
+  /** Who the graph belongs to, for accessible labels. */
   ownerLabel: string;
+  /** The graph belongs to the signed-in person. */
+  isSelf?: boolean;
   heading?: string;
 }
 
-export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ownerLabel, heading = 'Contribuições' }) => {
+export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ownerLabel, isSelf = false, heading: headingProp }) => {
+  const { t, lang, locale } = useI18n();
+  const heading = headingProp ?? t('Contribuições', 'Contributions');
+  const num = (n: number) => n.toLocaleString(locale);
+  const plural = (n: number, one: string, many: string) => `${num(n)} ${n === 1 ? one : many}`;
+  const kindLabel = (k: ContributionKind) => (lang === 'en' ? CONTRIBUTION_KINDS[k].labelEn : CONTRIBUTION_KINDS[k].label);
+  const kindPlural = (k: ContributionKind) => (lang === 'en' ? CONTRIBUTION_KINDS[k].pluralEn : CONTRIBUTION_KINDS[k].plural);
+  const contributions = (n: number) => plural(n, t('contribuição', 'contribution'), t('contribuições', 'contributions'));
+  const days = (n: number) => plural(n, t('dia', 'day'), t('dias', 'days'));
   const today = useMemo(() => new Date(), []);
   const yearEvents = useMemo(() => eventsInLastYear(events, today), [events, today]);
   const weeks = useMemo(() => buildCalendar(yearEvents, today), [yearEvents, today]);
@@ -67,12 +76,12 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
       const month = week[0].date.slice(0, 7);
       if (month !== lastMonth) {
         // Skip a label squeezed into the first partial column.
-        if (!(col === 0 && Number(week[0].date.slice(8)) > 24)) labels.push({ col, text: shortMonth(week[0].date) });
+        if (!(col === 0 && Number(week[0].date.slice(8)) > 24)) labels.push({ col, text: shortMonth(week[0].date, locale) });
         lastMonth = month;
       }
     });
     return labels;
-  }, [weeks]);
+  }, [weeks, locale]);
 
   const activeDays = useMemo(
     () =>
@@ -103,14 +112,14 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
   const gridWidth = weeks.length * (CELL + GAP);
 
   return (
-    <section aria-label={`${heading} de ${ownerLabel}`} className="space-y-4">
+    <section aria-label={isSelf ? heading : `${heading} — ${ownerLabel}`} className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-poppins text-sm sm:text-base font-bold text-[#0F172A] dark:text-[#F0F6FC] flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-[#22863A] dark:text-[#56D364]" strokeWidth={1.75} aria-hidden="true" />
           <span>{heading}</span>
         </h3>
         <p className="text-xs text-[#475569] dark:text-[#94A3B8]">
-          {plural(summary.totalCount, 'contribuição', 'contribuições')} no último ano
+          {contributions(summary.totalCount)} {t('no último ano', 'in the last year')}
         </p>
       </div>
 
@@ -119,39 +128,39 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
         <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
           <div className="text-xs text-[#475569] dark:text-[#94A3B8] flex items-center gap-1.5">
             <Award className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-            Pontos (1 ano)
+            {t('Pontos (1 ano)', 'Points (1 year)')}
           </div>
           <div className="font-mono text-2xl font-bold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5">
-            {summary.totalPoints.toLocaleString('pt-PT')}
+            {num(summary.totalPoints)}
           </div>
           {allTimePoints !== summary.totalPoints && (
             <div className="text-xs text-[#64748B] dark:text-[#8B949E] tabular-nums">
-              {allTimePoints.toLocaleString('pt-PT')} no total
+              {num(allTimePoints)} {t('no total', 'all time')}
             </div>
           )}
         </div>
         <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
-          <div className="text-xs text-[#475569] dark:text-[#94A3B8]">Contribuições</div>
+          <div className="text-xs text-[#475569] dark:text-[#94A3B8]">{t('Contribuições', 'Contributions')}</div>
           <div className="font-mono text-2xl font-bold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5">
-            {summary.totalCount.toLocaleString('pt-PT')}
+            {num(summary.totalCount)}
           </div>
         </div>
         <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
-          <div className="text-xs text-[#475569] dark:text-[#94A3B8]">Dias ativos</div>
+          <div className="text-xs text-[#475569] dark:text-[#94A3B8]">{t('Dias ativos', 'Active days')}</div>
           <div className="font-mono text-2xl font-bold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5">
-            {summary.activeDays.toLocaleString('pt-PT')}
+            {num(summary.activeDays)}
           </div>
         </div>
         <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
           <div className="text-xs text-[#475569] dark:text-[#94A3B8] flex items-center gap-1.5">
             <Flame className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-            Sequência
+            {t('Sequência', 'Streak')}
           </div>
           <div className="font-mono text-2xl font-bold text-[#0F172A] dark:text-[#F0F6FC] tabular-nums mt-0.5">
-            {plural(summary.currentStreak, 'dia', 'dias')}
+            {days(summary.currentStreak)}
           </div>
           <div className="text-xs text-[#64748B] dark:text-[#8B949E] tabular-nums">
-            recorde: {plural(summary.longestStreak, 'dia', 'dias')}
+            {t('recorde', 'best')}: {days(summary.longestStreak)}
           </div>
         </div>
       </div>
@@ -176,7 +185,7 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
               className="sticky left-0 z-10 grid pr-1 text-xs text-[#64748B] dark:text-[#8B949E] leading-none bg-[#FFFFFF] dark:bg-[#161B22]"
               style={{ gridTemplateRows: `repeat(7, ${CELL}px)`, rowGap: GAP }}
             >
-              {WEEKDAY_LABELS.map((label, i) => (
+              {WEEKDAY_LABELS[lang].map((label, i) => (
                 <span key={i} className="flex items-center">
                   {label}
                 </span>
@@ -186,7 +195,10 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
             {/* Squares */}
             <div
               role="img"
-              aria-label={`Calendário de contribuições ${ownerLabel === 'você' ? 'suas' : `de ${ownerLabel}`}: ${plural(summary.totalCount, 'contribuição', 'contribuições')} em ${plural(summary.activeDays, 'dia', 'dias')} no último ano. Detalhe disponível na tabela abaixo.`}
+              aria-label={t(
+                `Calendário de contribuições ${isSelf ? 'suas' : `de ${ownerLabel}`}: ${contributions(summary.totalCount)} em ${days(summary.activeDays)} no último ano. Detalhe disponível na tabela abaixo.`,
+                `Contribution calendar ${isSelf ? '(yours)' : `of ${ownerLabel}`}: ${contributions(summary.totalCount)} on ${days(summary.activeDays)} in the last year. Details in the table below.`
+              )}
               className="grid grid-flow-col"
               style={{
                 gridTemplateRows: `repeat(7, ${CELL}px)`,
@@ -214,13 +226,13 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
             style={{ left: hovered.left, top: hovered.top - 6 }}
           >
             <strong className="font-semibold">
-              {hovered.day.count === 0 ? 'Sem contribuições' : plural(hovered.day.count, 'contribuição', 'contribuições')}
+              {hovered.day.count === 0 ? t('Sem contribuições', 'No contributions') : contributions(hovered.day.count)}
             </strong>{' '}
-            em {longDate(hovered.day.date)}
+            {t('em', 'on')} {longDate(hovered.day.date, locale)}
             {hovered.day.points > 0 && <span className="opacity-80"> · {hovered.day.points} pts</span>}
             {(eventsByDay.get(hovered.day.date) || []).slice(0, 3).map((e, i) => (
               <div key={i} className="opacity-80 max-w-[260px] truncate">
-                {CONTRIBUTION_KINDS[e.kind].label}: {e.subject}
+                {kindLabel(e.kind)}: {e.subject}
               </div>
             ))}
           </div>
@@ -229,17 +241,17 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
 
       <div className="flex justify-end -mt-2">
         <div className="flex items-center gap-1.5 text-xs text-[#64748B] dark:text-[#8B949E]" aria-hidden="true">
-          <span>Menos</span>
+          <span>{t('Menos', 'Less')}</span>
           {([0, 1, 2, 3, 4] as const).map((level) => (
             <span key={level} className={`inline-block rounded-[2px] ${LEVEL_CLASSES[level]}`} style={{ width: CELL, height: CELL }} />
           ))}
-          <span>Mais</span>
+          <span>{t('Mais', 'More')}</span>
         </div>
       </div>
 
       {/* Breakdown by kind */}
       <div className="flex flex-wrap items-center gap-3">
-        <ul className="flex flex-wrap gap-1.5" aria-label="Contribuições por tipo">
+        <ul className="flex flex-wrap gap-1.5" aria-label={t('Contribuições por tipo', 'Contributions by type')}>
           {KIND_ORDER.map((kind) => (
             <li
               key={kind}
@@ -249,7 +261,7 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
                   : 'bg-[#F8FAFC] dark:bg-[#0D1117] text-[#64748B] dark:text-[#8B949E]'
               }`}
             >
-              {CONTRIBUTION_KINDS[kind].plural}: <strong>{summary.byKind[kind]}</strong>
+              {kindPlural(kind)}: <strong>{summary.byKind[kind]}</strong>
             </li>
           ))}
         </ul>
@@ -257,22 +269,25 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
 
       {summary.totalCount === 0 && (
         <p className="text-sm text-[#475569] dark:text-[#94A3B8] p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D1117]">
-          Ainda sem contribuições registadas no último ano. Publicar estudos, comentar e participar nas conversas dos estudos aparece aqui.
+          {t(
+            'Ainda sem contribuições registadas no último ano. Publicar estudos, comentar e participar nas conversas dos estudos aparece aqui.',
+            'No contributions recorded in the last year yet. Publishing studies, commenting and joining study discussions shows up here.'
+          )}
         </p>
       )}
 
       {/* Recent activity */}
       {yearEvents.length > 0 && (
         <div className="space-y-1.5">
-          <h4 className="text-xs font-semibold text-[#475569] dark:text-[#94A3B8]">Atividade recente</h4>
+          <h4 className="text-xs font-semibold text-[#475569] dark:text-[#94A3B8]">{t('Atividade recente', 'Recent activity')}</h4>
           <ul className="space-y-1">
             {yearEvents.slice(0, 5).map((e, i) => (
               <li key={`${e.date}-${i}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-x-3 text-sm">
                 <span className="min-w-0 truncate text-[#0F172A] dark:text-[#E2E8F0]">
-                  <span className="text-[#475569] dark:text-[#94A3B8]">{CONTRIBUTION_KINDS[e.kind].label}:</span> {e.subject}
+                  <span className="text-[#475569] dark:text-[#94A3B8]">{kindLabel(e.kind)}:</span> {e.subject}
                 </span>
                 <span className="sm:shrink-0 text-xs text-[#64748B] dark:text-[#8B949E] tabular-nums">
-                  {longDate(e.date)} · +{e.points} pts
+                  {longDate(e.date, locale)} · +{e.points} pts
                 </span>
               </li>
             ))}
@@ -284,20 +299,20 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
       <div className="flex flex-col sm:flex-row gap-2 text-xs text-[#475569] dark:text-[#94A3B8]">
         {activeDays.length > 0 && (
           <details className="flex-1">
-            <summary className="cursor-pointer select-none">Ver como tabela ({plural(activeDays.length, 'dia ativo', 'dias ativos')})</summary>
+            <summary className="cursor-pointer select-none">{t('Ver como tabela', 'View as table')} ({plural(activeDays.length, t('dia ativo', 'active day'), t('dias ativos', 'active days'))})</summary>
             <div className="mt-2 max-h-56 overflow-y-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-[#64748B] dark:text-[#8B949E]">
-                    <th scope="col" className="py-1 pr-3 font-medium">Data</th>
-                    <th scope="col" className="py-1 pr-3 font-medium text-right">Contribuições</th>
-                    <th scope="col" className="py-1 font-medium text-right">Pontos</th>
+                    <th scope="col" className="py-1 pr-3 font-medium">{t('Data', 'Date')}</th>
+                    <th scope="col" className="py-1 pr-3 font-medium text-right">{t('Contribuições', 'Contributions')}</th>
+                    <th scope="col" className="py-1 font-medium text-right">{t('Pontos', 'Points')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {activeDays.map((d) => (
                     <tr key={d.date} className="border-t border-[#E2E8F0] dark:border-[#30363D] text-[#0F172A] dark:text-[#E2E8F0]">
-                      <td className="py-1 pr-3">{longDate(d.date)}</td>
+                      <td className="py-1 pr-3">{longDate(d.date, locale)}</td>
                       <td className="py-1 pr-3 text-right tabular-nums">{d.count}</td>
                       <td className="py-1 text-right tabular-nums">{d.points}</td>
                     </tr>
@@ -310,17 +325,22 @@ export const ContributionGraph: React.FC<ContributionGraphProps> = ({ events, ow
         <details className="flex-1">
           <summary className="cursor-pointer select-none flex items-center gap-1.5">
             <Info className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
-            Como os pontos são calculados
+            {t('Como os pontos são calculados', 'How points are calculated')}
           </summary>
           <ul className="mt-2 space-y-0.5">
             {KIND_ORDER.map((kind) => (
               <li key={kind} className="flex justify-between gap-3">
-                <span>{CONTRIBUTION_KINDS[kind].label}</span>
+                <span>{kindLabel(kind)}</span>
                 <span className="tabular-nums font-medium text-[#0F172A] dark:text-[#E2E8F0]">+{CONTRIBUTION_KINDS[kind].points}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-1.5">Só contam ações com data registada. Mensagens antigas sem data não são contadas.</p>
+          <p className="mt-1.5">
+            {t(
+              'Só contam ações com data registada. Mensagens antigas sem data não são contadas.',
+              'Only dated actions count. Older messages without a date are not counted.'
+            )}
+          </p>
         </details>
       </div>
     </section>

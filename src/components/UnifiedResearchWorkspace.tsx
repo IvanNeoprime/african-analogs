@@ -22,6 +22,9 @@ import {
   getCelestialBodyLabel,
   PLANET_BODIES,
   SATELLITE_BODIES,
+  bodyName,
+  bodyFullName,
+  bodyOptionLabel,
 } from '../data/celestialBodies';
 import {
   Camera,
@@ -1308,21 +1311,21 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <optgroup label="Planetas do Sistema Solar">
                   {PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.optionLabel}
+                      {bodyOptionLabel(b)}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Planetas Anões">
                   {DWARF_PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.optionLabel}
+                      {bodyOptionLabel(b)}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Satélites Naturais (Luas)">
                   {SATELLITE_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.optionLabel}
+                      {bodyOptionLabel(b)}
                     </option>
                   ))}
                 </optgroup>
@@ -2107,21 +2110,21 @@ export const UnifiedResearchWorkspace: React.FC<UnifiedResearchWorkspaceProps> =
                 <optgroup label="Planetas">
                   {PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      Parecidos com {b.namePt}
+                      Parecidos com {bodyName(b)}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Planetas Anões">
                   {DWARF_PLANET_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      Parecidos com {b.namePt}
+                      Parecidos com {bodyName(b)}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Satélites Naturais (Luas)">
                   {SATELLITE_BODIES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      Parecidos com {b.namePt} ({b.hostBodyPt})
+                      Parecidos com {bodyFullName(b)}
                     </option>
                   ))}
                 </optgroup>

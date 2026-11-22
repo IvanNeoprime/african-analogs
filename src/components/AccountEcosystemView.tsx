@@ -14,6 +14,9 @@ import {
   DWARF_PLANET_BODIES,
   PLANET_BODIES,
   SATELLITE_BODIES,
+  bodyName,
+  bodyFullName,
+  bodyOptionLabel,
 } from '../data/celestialBodies';
 import {
   generateDynamicAvatarSvg,
@@ -963,7 +966,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                                 : 'bg-[#F1F5F9] dark:bg-[#0D1117] text-[#475569] dark:text-[#94A3B8]'
                             }`}
                           >
-                            {p.namePt}
+                            {bodyName(p)}
                           </button>
                         );
                       })}
@@ -986,7 +989,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                                   : 'bg-[#FFFFFF] dark:bg-[#161B22] text-[#475569] dark:text-[#94A3B8]'
                               }`}
                             >
-                              {p.hostBodyPt ? `${p.namePt} (${p.hostBodyPt})` : p.namePt}
+                              {bodyFullName(p)}
                             </button>
                           );
                         })}
@@ -1306,7 +1309,8 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
         <section className="bg-[#FFFFFF] dark:bg-[#161B22] rounded-2xl p-6 shadow-xs">
           <ContributionGraph
             events={collectContributions(currentUser, { samples, studyThreads, networkGroups })}
-            ownerLabel="você"
+            ownerLabel={currentUser.name}
+            isSelf
             heading="As suas contribuições"
           />
         </section>
@@ -1522,21 +1526,21 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                   <optgroup label="Planetas do Sistema Solar">
                     {PLANET_BODIES.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.optionLabel}
+                        {bodyOptionLabel(p)}
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Planetas Anões">
                     {DWARF_PLANET_BODIES.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.optionLabel}
+                        {bodyOptionLabel(p)}
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Satélites Naturais (Luas)">
                     {SATELLITE_BODIES.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.optionLabel}
+                        {bodyOptionLabel(p)}
                       </option>
                     ))}
                   </optgroup>
@@ -1876,7 +1880,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                               : 'bg-[#F1F5F9] dark:bg-[#0D1117] text-[#475569] dark:text-[#94A3B8]'
                           }`}
                         >
-                          {p.namePt}
+                          {bodyName(p)}
                         </button>
                       );
                     })}
@@ -1899,7 +1903,7 @@ export const AccountEcosystemView: React.FC<AccountEcosystemViewProps> = ({
                                 : 'bg-[#FFFFFF] dark:bg-[#161B22] text-[#475569] dark:text-[#94A3B8]'
                             }`}
                           >
-                            {p.hostBodyPt ? `${p.namePt} (${p.hostBodyPt})` : p.namePt}
+                            {bodyFullName(p)}
                           </button>
                         );
                       })}

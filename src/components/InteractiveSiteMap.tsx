@@ -2,7 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import L from 'leaflet';
 import { Calendar, ChevronLeft, ChevronRight, Layers, Maximize2, Minimize2, Pause, Play } from 'lucide-react';
 import { AnalogueSite, PlanetaryTarget } from '../types';
-import { CELESTIAL_BODIES } from '../data/celestialBodies';
+import { getCelestialBodyLabel } from '../data/celestialBodies';
 import { fetchOfficialElevation, NasaEonetEventItem } from '../services/officialApis';
 
 export interface InteractiveSiteMapHandle {
@@ -62,8 +62,7 @@ const EVENT_COLORS: { match: RegExp; color: string }[] = [
 ];
 
 const bodyColor = (target: PlanetaryTarget) => BODY_COLORS[target] || DEFAULT_BODY_COLOR;
-const bodyName = (target: PlanetaryTarget) =>
-  target === 'Both' ? 'Marte e Lua' : CELESTIAL_BODIES.find((b) => b.id === target)?.namePt || target;
+const bodyName = (target: PlanetaryTarget) => getCelestialBodyLabel(target);
 const eventColor = (category: string) => EVENT_COLORS.find((e) => e.match.test(category))?.color || '#D97706';
 
 const escapeHtml = (value: unknown) =>
